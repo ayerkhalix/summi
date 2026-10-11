@@ -1,5 +1,7 @@
 import type { GameState, GameView, PlayerCommand, Result } from "@/game/types";
+export type GameMode = "friends" | "solo" | "bots";
 export type Member = {
+  isBot?: boolean;
   id: string;
   tokenHash: string;
   name: string;
@@ -17,6 +19,7 @@ export type RoundSummary = {
   completedAt: number;
 };
 export type Room = {
+  mode?: GameMode;
   id: string;
   code: string;
   version: number;
@@ -35,8 +38,9 @@ export type Room = {
 };
 export type RoomView = Omit<
   Room,
-  "members" | "game" | "processed" | "autoAt" | "previousStarter"
+  "members" | "game" | "processed" | "autoAt" | "previousStarter" | "mode"
 > & {
+  mode: GameMode;
   members: Omit<Member, "tokenHash" | "lastSeen">[];
   game: GameView | null;
   me: string;

@@ -76,18 +76,33 @@ export async function body(req: NextRequest) {
 }
 export function protectOrigin(req: NextRequest) {
   const origin = req.headers.get("origin");
-  const allowed =
-    process.env.APP_ORIGIN ||
-    (process.env.NODE_ENV !== "production" ? req.nextUrl.origin : null);
-  if (!allowed)
+  const production = process.env.NODE_ENV === "production";
+  const configured = process.env.APP_ORIGIN;
+  if (production && !configured)
     throw new ApiError(
       503,
       "Configure APP_ORIGIN before enabling production rooms.",
     );
-  if (origin && origin !== allowed)
-    throw new ApiError(403, "This request came from an unauthorized origin.");
   if (req.headers.get("sec-fetch-site") === "cross-site")
     throw new ApiError(403, "Cross-site requests are not allowed.");
+  if (!origin) return;
+  let allowed = false;
+  try {
+    const browser = new URL(origin);
+    // Next's internal URL can use localhost even when the browser uses a LAN
+    // address or 127.0.0.1. Host is the address the browser actually requested.
+    const incoming = new URL(
+      `${req.nextUrl.protocol}//${req.headers.get("host") || req.nextUrl.host}`,
+    );
+    allowed = production
+      ? browser.origin === new URL(configured!).origin
+      : browser.origin === incoming.origin;
+    allowed &&= browser.origin === origin;
+  } catch {
+    /* Malformed and opaque origins are rejected. */
+  }
+  if (!allowed)
+    throw new ApiError(403, "This request came from an unauthorized origin.");
 }
 export function service() {
   return new RoomService(getStore());

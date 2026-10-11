@@ -1,6 +1,6 @@
 # SUMMIN
 
-A browser card game for 2–5 friends. One shared 52-card deck, a public target, private hands, staged reveals, and two chances to add cards. Closest wins, on either side of the target.
+A browser card game for solo challenges, computer opponents, or 2–5 friends. One shared 52-card deck, a public target, private hands, staged reveals, and two chances to add cards. Closest wins, on either side of the target.
 
 This repository contains the playable application, a standalone rules engine, a real local multiplayer server, a Supabase production storage adapter, SQL migrations, synthesized audio, and automated tests. **No Supabase project or hosted deployment is configured in this checkout.**
 
@@ -19,9 +19,19 @@ Separate tabs in the same browser profile share the guest cookie and therefore r
 
 Local mode is an actual shared server: browser sessions communicate over HTTP and server-sent events. It does not simulate friends or generate fake room codes. Rooms live in the single Next.js server process and disappear on restart. Local mode does not support multiple server processes or serverless replicas.
 
-For friends on the same LAN, the dev server listens on `0.0.0.0`. Use the computer’s LAN address in the invitation URL. If `APP_ORIGIN` is set, it must match that address and port; otherwise local development accepts the request URL’s origin. Allow the dev server through your local firewall if needed. The development server is not intended as a public production deployment.
+For friends on the same LAN, the dev server listens on `0.0.0.0`. Use the computer’s LAN address in the invitation URL. Development validates the browser's origin against the incoming `Host`, so localhost, 127.0.0.1, custom ports, and LAN addresses work even when `.env.local` has a localhost `APP_ORIGIN`. Next's asset guard allows this machine's IPv4 addresses and loopback. For a development tunnel, add its hostname to `DEV_ALLOWED_ORIGINS` (comma-separated hostnames, without schemes or ports). Production still requires the exact public `APP_ORIGIN` and rejects foreign origins and cross-site requests. Allow the dev server through your local firewall if needed. The development server is not intended as a public production deployment.
 
 The landing page and explicitly labeled local tutorial work without any backend configuration. In production mode, room creation/joining/actions require configured Supabase credentials. A missing backend produces a clear error; it never creates pretend online rooms.
+
+## Solo, bots, and the table scene
+
+Choose **Solo challenge** or **Play with bots** on the landing page, enter a display name, and start immediately. There is no account signup. Both modes work with the default local server, without Supabase credentials, a second browser, or other players. All three game modes use the authoritative server and its storage; production solo and bot tables also require the configured Supabase backend. These modes require a running server and are not offline browser simulations.
+
+- **Solo challenge:** one player, one burn, targets 80–150, and initial hands of 8–15. This separate practice variant uses the two-player target/hand ranges and the same card values, reveal sequence, addition caps, and 52-card inventory. Results record absolute distance and the best distance in the table's completed history. Official multiplayer remains limited to 2–5 players.
+- **Bot match:** choose 1–4 named computer opponents, giving 2–5 total players. All official multiplayer ranges and rules apply. Bots commit concealed initial counts and take additions automatically, with a short presentation delay. Their policy receives only `projectGame(game, botId)`: its own hand, public cards, burns, and counts. It estimates unseen rank probabilities and minimizes expected absolute distance; it cannot inspect deck order or opponents' hidden identities. Bots are labeled, never receive host privileges, and never substitute for a disconnected human. The usual pause and 90-second clean termination still apply.
+- Practice player seats are reserved for the original human and configured bots. Other guests may spectate, including during play, with the same privacy filtering as multiplayer; they cannot claim a practice seat. Completed history is retained for rematches and lobby returns.
+
+The landing page centers its controls among three persistent 3D cards. Entering a room flips and gathers those same card elements into the shared deck; the lobby deck moves to the table when the host starts. Native history updates preserve the mounted scene and room URLs still restore on refresh. Hands surround the centered target and decision controls on desktop; narrow screens stack the table into centered sections. Card deals, flips, table entrance, and hover lift use perspective transforms. System and saved reduced-motion preferences disable scene travel and idle movement.
 
 ## Stack and commands
 
@@ -49,6 +59,8 @@ npm run test:e2e
 
 On Linux CI, use `npx playwright install --with-deps chromium`. Browser tests use isolated guests, fixed decision sequences, and independent checks of authoritative totals and privacy. They never expose an endpoint for setting production decks, targets, winners, or clocks. Unit tests inject seeded random sources; real room shuffles, target generation, and reveal choices use Node’s cryptographic `randomInt`.
 
+If a dev server is already running in this checkout, reuse it instead of starting a second Next instance. In PowerShell: `$env:PLAYWRIGHT_BASE_URL='http://localhost:3000'; npm run test:e2e`. The running server must use the local backend. Browser tests include complete solo and bot matches, refresh/rematch recovery, persistent scene-card elements, centered decisions, mobile overflow, and real 127.0.0.1 guest entry alongside multiplayer and tutorial coverage.
+
 ## Official rules and implemented decisions
 
 | Players | Inclusive target | Inclusive initial hand |
@@ -66,7 +78,7 @@ The first reveal exposes `floor(initial count / 2)` random cards. The first addi
 
 Final scoring uses absolute distance from the target. At equal distance, below beats above. Remaining same-side ties share victory, including multiple exact matches. Overshooting does not automatically lose. The results show complete hands, totals, distance, side, winners, the applicable tiebreak, and remaining deck count.
 
-There are **no decision timers** and no automatic strategic choices. Readiness is required from all connected seated players to start. The starting player is cryptographically selected for the first round and rotates to the next seated player thereafter. If the prior starter has left the roster, the earliest remaining seat starts. A round is explicitly started by the host; results, cards, and up to 50 completed round summaries remain until the next round starts. Returning to the lobby preserves the prior game and completed history, while resetting ready indicators.
+There are **no decision timers** and no automatic strategic choices for human players. Readiness is required from all connected seated players to start. The starting player is cryptographically selected for the first round and rotates to the next seated player thereafter. If the prior starter has left the roster, the earliest remaining seat starts. A round is explicitly started by the host; results, cards, and up to 50 completed round summaries remain until the next round starts. Returning to the lobby preserves the prior game and completed history, while resetting human ready indicators; bots remain ready.
 
 ### Connections, departure, and spectators
 
@@ -170,7 +182,7 @@ The only persistent browser data is the HTTP-only guest session cookie and local
 - **A second tab restores the same player:** use another browser profile/private context for a separate guest.
 - **Production room creation says Supabase is not configured:** set server-only variables, apply the migration, and restart/redeploy. The production build alone does not provision a backend.
 - **Room-storage unavailable:** check the URL/key, SQL migration, function permissions, and database connectivity. Provider errors are deliberately not returned to players or logged with private state.
-- **Invitation doesn’t work on another device:** `localhost` points to that device. Use the shared LAN or deployed HTTPS origin and set `APP_ORIGIN` accordingly.
+- **Invitation doesn’t work on another device:** `localhost` points to that device. Use the shared LAN address in development. For deployment, set `APP_ORIGIN` to the public HTTPS origin.
 - **No sound:** interact with the page, check mute/volume controls and browser device permissions, then use the sound test. Music is off initially.
 - **Unexpected pause in a backgrounded browser:** mobile/background tabs can suspend heartbeats. Focus/reconnect within the grace window. No automatic player decisions occur.
 - **Realtime unavailable:** authenticated SSE refreshes still retrieve current state every 1.5 seconds. Hosts must allow streaming responses and avoid buffering them. Real private state always comes from the API projection.
@@ -182,4 +194,4 @@ The only persistent browser data is the HTTP-only guest session cookie and local
 - The MVP has no turn timers, bots in multiplayer, chat, public matchmaking, wagers, account system, moderation dashboard, or third-party analytics.
 - The initial dependency audit reports a development-only `braces` advisory through Next’s ESLint plugin/glob dependency. No patched `braces` version is published in this environment. `npm audit --omit=dev` is clean; avoid untrusted filesystem glob patterns and update the lint dependency when an upstream fix is available. Do not downgrade the application framework just to conceal an advisory.
 
-See `tests/engine.test.ts`, `tests/rooms.test.ts`, `tests/config.test.ts`, `tests/supabase.test.ts`, and `e2e/multiplayer.spec.ts` for executable rule, coordination, privacy, backend/origin, database, and browser checks. Browser checks include a real offline interruption, a detected server pause, restoration of the existing seat, a complete rematch, and persistent audio/motion preferences.
+See `tests/engine.test.ts`, `tests/rooms.test.ts`, `tests/modes.test.ts`, `tests/origin.test.ts`, `tests/config.test.ts`, `tests/supabase.test.ts`, and `e2e/` for executable rule, coordination, mode, privacy, backend/origin, database, and browser checks. Browser checks include a real offline interruption, a detected server pause, restoration of the existing seat, complete multiplayer/solo/bot rematches, continuous 3D card elements, centered controls, loopback guest entry, and persistent audio/motion preferences.

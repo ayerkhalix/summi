@@ -1,8 +1,22 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
-import { act, advance, makeRound, projectGame } from "@/game/engine";
+import {
+  act,
+  advance,
+  makeRound,
+  makeSoloRound,
+  projectGame,
+} from "@/game/engine";
+import { botDecision } from "@/game/bot";
 import { TIMING } from "@/game/config";
 import { ApiError } from "./errors";
-import type { Member, Room, RoomCommand, RoomStore, RoomView } from "./types";
+import type {
+  GameMode,
+  Member,
+  Room,
+  RoomCommand,
+  RoomStore,
+  RoomView,
+} from "./types";
 
 export const hashToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");
@@ -25,10 +39,17 @@ function checkExpiry(room: Room, now: number) {
 }
 export function migrateHost(room: Room) {
   const current = room.members.find((m) => m.id === room.hostId);
-  if (current?.role === "player" && current.disconnectedAt === null) return;
+  if (
+    current?.role === "player" &&
+    !current.isBot &&
+    current.disconnectedAt === null
+  )
+    return;
   room.hostId =
     room.members
-      .filter((m) => m.role === "player" && m.disconnectedAt === null)
+      .filter(
+        (m) => m.role === "player" && !m.isBot && m.disconnectedAt === null,
+      )
       .sort((a, b) => a.joinedAt - b.joinedAt || a.id.localeCompare(b.id))[0]
       ?.id ?? null;
 }
@@ -54,7 +75,11 @@ function endMatch(room: Room, reason: string) {
 export function maintain(room: Room, now: number): Room {
   checkExpiry(room, now);
   for (const m of room.members)
-    if (m.disconnectedAt === null && now - m.lastSeen >= TIMING.stale)
+    if (
+      !m.isBot &&
+      m.disconnectedAt === null &&
+      now - m.lastSeen >= TIMING.stale
+    )
       m.disconnectedAt = m.lastSeen + TIMING.stale;
   migrateHost(room);
   const paused = pausedPlayers(room);
@@ -84,7 +109,15 @@ export function maintain(room: Room, now: number): Room {
     room.autoAt !== null &&
     now >= room.autoAt
   ) {
-    room.game = advance(room.game, randomInt);
+    if (automatic.has(room.game.phase))
+      room.game = advance(room.game, randomInt);
+    else {
+      const bot = pendingBot(room);
+      const decision =
+        bot && botDecision(projectGame(room.game, bot.id), bot.id);
+      if (bot && decision)
+        room.game = act(room.game, bot.id, decision, randomInt);
+    }
     setAutomatic(room, now);
     if (room.game.phase === "round_results") {
       room.status = "results";
@@ -107,9 +140,64 @@ export function maintain(room: Room, now: number): Room {
 }
 function setAutomatic(room: Room, now: number) {
   room.autoAt =
-    room.game && automatic.has(room.game.phase)
-      ? now + TIMING.automaticPhase
+    room.status === "playing" &&
+    room.game &&
+    (automatic.has(room.game.phase) || pendingBot(room))
+      ? now + (automatic.has(room.game.phase) ? TIMING.automaticPhase : 900)
       : null;
+}
+function pendingBot(room: Room) {
+  const game = room.game;
+  if (!game) return undefined;
+  return room.members.find(
+    (m) =>
+      m.isBot &&
+      m.role === "player" &&
+      (game.phase === "initial_selection"
+        ? game.players.some((p) => p.id === m.id && p.initialCount === null)
+        : (game.phase === "first_additions" ||
+            game.phase === "second_additions") &&
+          game.order[game.cursor] === m.id),
+  );
+}
+function startRound(room: Room, now: number) {
+  const players = room.members.filter(
+    (m) => m.role === "player" && m.disconnectedAt === null,
+  );
+  const solo = room.mode === "solo";
+  if (
+    players.length < (solo ? 1 : 2) ||
+    players.length > (solo ? 1 : 5) ||
+    players.some((m) => !m.ready)
+  )
+    throw new ApiError(
+      409,
+      solo
+        ? "Your solo seat must be ready to start."
+        : "You need 2–5 connected players, all ready, to start.",
+    );
+  for (const former of room.members)
+    if (former.role === "player" && former.disconnectedAt !== null) {
+      former.role = "spectator";
+      former.ready = false;
+    }
+  const ids = players.map((p) => p.id);
+  const previous = room.previousStarter
+    ? ids.indexOf(room.previousStarter)
+    : -1;
+  const starter =
+    previous >= 0
+      ? (previous + 1) % ids.length
+      : room.roundNumber
+        ? 0
+        : randomInt(ids.length);
+  room.game = solo
+    ? makeSoloRound(ids[0], ++room.roundNumber, randomInt)
+    : makeRound(ids, ++room.roundNumber, starter, randomInt);
+  room.previousStarter = ids[starter];
+  room.status = "playing";
+  room.endedReason = null;
+  setAutomatic(room, now);
 }
 export function viewRoom(
   room: Room,
@@ -119,6 +207,7 @@ export function viewRoom(
   const me = member(room, tokenHash);
   return {
     id: room.id,
+    mode: room.mode ?? "friends",
     code: room.code,
     version: room.version,
     createdAt: room.createdAt,
@@ -133,6 +222,7 @@ export function viewRoom(
     paused: pausedPlayers(room),
     members: room.members.map((m) => ({
       id: m.id,
+      isBot: !!m.isBot,
       name: m.name,
       role: m.role,
       ready: m.ready,
@@ -149,14 +239,26 @@ export class RoomService {
     readonly store: RoomStore,
     readonly now: () => number = Date.now,
   ) {}
-  async create(name: string, tokenHash: string) {
+  async create(
+    name: string,
+    tokenHash: string,
+    options: { mode?: GameMode; botCount?: number } = {},
+  ) {
     const now = this.now();
+    const mode = options.mode ?? "friends";
+    const botCount = options.botCount ?? 2;
+    if (
+      !["friends", "solo", "bots"].includes(mode) ||
+      (mode === "bots" &&
+        (!Number.isInteger(botCount) || botCount < 1 || botCount > 4))
+    )
+      throw new ApiError(400, "Choose one to four bot opponents.");
     const m: Member = {
       id: randomUUID(),
       tokenHash,
       name,
       role: "player",
-      ready: false,
+      ready: mode !== "friends",
       joinedAt: now,
       lastSeen: now,
       disconnectedAt: null,
@@ -167,6 +269,7 @@ export class RoomService {
         () => alphabet[randomInt(alphabet.length)],
       ).join("");
       const room: Room = {
+        mode,
         id: randomUUID(),
         code,
         version: 0,
@@ -183,6 +286,20 @@ export class RoomService {
         roundNumber: 0,
         previousStarter: null,
       };
+      if (mode === "bots")
+        for (let i = 0; i < botCount; i++)
+          room.members.push({
+            id: randomUUID(),
+            tokenHash: `bot:${randomUUID()}`,
+            name: ["Sage", "Cleo", "Atlas", "Juno"][i] + " · Bot",
+            role: "player",
+            ready: true,
+            joinedAt: now + i + 1,
+            lastSeen: now,
+            disconnectedAt: null,
+            isBot: true,
+          });
+      if (mode !== "friends") startRound(room, now);
       if (await this.store.create(room))
         return viewRoom(room, tokenHash, this.store.kind);
     }
@@ -204,6 +321,11 @@ export class RoomService {
         migrateHost(room);
         return room;
       }
+      if (role === "player" && room.mode && room.mode !== "friends")
+        throw new ApiError(
+          409,
+          "This is a practice table. You can join as a spectator.",
+        );
       if (room.members.length >= 25)
         throw new ApiError(409, "This room has reached its spectator limit.");
       if (role === "player" && room.status === "playing")
@@ -248,7 +370,9 @@ export class RoomService {
         pausedPlayers(current).length === 0) ||
       current.members.some(
         (m) =>
-          (m.disconnectedAt === null && now - m.lastSeen >= TIMING.stale) ||
+          (!m.isBot &&
+            m.disconnectedAt === null &&
+            now - m.lastSeen >= TIMING.stale) ||
           ((current.status === "playing"
             ? current.game?.players.some((p) => p.id === m.id)
             : m.role === "player") &&
@@ -305,39 +429,7 @@ export class RoomService {
             throw new ApiError(403, "Only the host can start a round.");
           if (room.status === "playing")
             throw new ApiError(409, "A round is already in progress.");
-          const players = room.members.filter(
-            (m) => m.role === "player" && m.disconnectedAt === null,
-          );
-          if (
-            players.length < 2 ||
-            players.length > 5 ||
-            players.some((m) => !m.ready)
-          )
-            throw new ApiError(
-              409,
-              "You need 2–5 connected players, all ready, to start.",
-            );
-          // Disconnected seats become spectators before a new match; they never silently rejoin it.
-          for (const former of room.members)
-            if (former.role === "player" && former.disconnectedAt !== null) {
-              former.role = "spectator";
-              former.ready = false;
-            }
-          const ids = players.map((p) => p.id);
-          const previous = room.previousStarter
-            ? ids.indexOf(room.previousStarter)
-            : -1;
-          const starter =
-            previous >= 0
-              ? (previous + 1) % ids.length
-              : room.roundNumber
-                ? 0
-                : randomInt(ids.length);
-          room.game = makeRound(ids, ++room.roundNumber, starter, randomInt);
-          room.previousStarter = ids[starter];
-          room.status = "playing";
-          room.endedReason = null;
-          setAutomatic(room, now);
+          startRound(room, now);
           break;
         }
         case "game":
@@ -362,9 +454,14 @@ export class RoomService {
           room.status = "lobby";
           room.endedReason = null;
           // Keep the previous game and history until the next round explicitly starts.
-          for (const player of room.members) player.ready = false;
+          for (const player of room.members) player.ready = !!player.isBot;
           break;
         case "claim":
+          if (room.mode && room.mode !== "friends")
+            throw new ApiError(
+              409,
+              "Practice tables are reserved for their original player.",
+            );
           if (room.status === "playing")
             throw new ApiError(
               409,

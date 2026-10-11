@@ -20,22 +20,15 @@ import {
   MOTION,
   PHASE_LABELS,
   PHASES,
-  RULES,
+  rulesFor,
   TIMING,
-  type PlayerCount,
 } from "@/game/config";
-import type { Card, GameView } from "@/game/types";
+import type { GameView } from "@/game/types";
 import type { RoomCommand, RoomView } from "@/server/types";
 import { PlayingCard, Suit } from "./card";
 import { Icon } from "./icon";
 import { Modal, Rules, Settings, Tutorial } from "./dialogs";
-
-const exampleCard = (rank: number, suit: Card["suit"]): Card => ({
-  id: `${suit}-${rank}`,
-  rank,
-  suit,
-  value: rank,
-});
+import { SceneCards, SceneDeck } from "./scene-cards";
 async function request<T>(
   url: string,
   method = "GET",
@@ -56,7 +49,7 @@ async function request<T>(
 export function GameApp({ initialCode }: { initialCode?: string }) {
   const router = useRouter();
   const [room, setRoom] = useState<RoomView | null>(null),
-    [entry, setEntry] = useState<"create" | "join" | null>(
+    [entry, setEntry] = useState<"create" | "join" | "solo" | "bots" | null>(
       initialCode ? "join" : null,
     );
   const [dialog, setDialog] = useState<
@@ -67,6 +60,7 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
     [busy, setBusy] = useState(false),
     [connected, setConnected] = useState(true);
   const [booting, setBooting] = useState(Boolean(initialCode));
+  const [entryCode, setEntryCode] = useState(initialCode ?? "");
   const prefs = useSyncExternalStore(
     audio.subscribe,
     audio.snapshot,
@@ -78,6 +72,29 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
   useEffect(() => {
     roomRef.current = room;
   }, [room]);
+  useEffect(() => {
+    const restore = () => {
+      const code = /^\/room\/([A-Z2-9]{6})$/.exec(
+        window.location.pathname,
+      )?.[1];
+      if (code === roomRef.current?.code) return;
+      if (!code) {
+        setRoom(null);
+        setEntry(null);
+        setError("");
+        return;
+      }
+      setEntryCode(code);
+      void request<RoomView>(`/api/rooms/${code}`)
+        .then(setRoom)
+        .catch(() => {
+          setRoom(null);
+          setEntry("join");
+        });
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
 
   useEffect(() => {
     const unlock = () => {
@@ -276,14 +293,19 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
     name: string,
     inviteCode: string,
     role: "player" | "spectator",
+    botCount = 2,
   ) {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
       const next =
-        entry === "create"
-          ? await request<RoomView>("/api/rooms", "POST", { name })
+        entry !== "join"
+          ? await request<RoomView>("/api/rooms", "POST", {
+              name,
+              mode: entry === "create" ? "friends" : entry,
+              ...(entry === "bots" ? { botCount } : {}),
+            })
           : await request<RoomView>(
               `/api/rooms/${inviteCode.toUpperCase()}`,
               "POST",
@@ -295,7 +317,14 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
       setRoom(next);
       setEntry(null);
       audio.play(entry === "create" ? "created" : "joined");
-      router.push(`/room/${next.code}`);
+      // Keep this scene mounted so its physical cards can travel to the deck.
+      // A refresh still restores the same server-authorized room route.
+      if (window.location.pathname !== `/room/${next.code}`)
+        window.history.pushState(null, "", `/room/${next.code}`);
+      window.scrollTo({
+        top: 0,
+        behavior: prefs.reducedMotion || systemReduce ? "instant" : "smooth",
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to enter the room.");
       audio.play("error");
@@ -323,6 +352,16 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
       <div
         className={`app ${room ? "in-room" : ""} ${prefs.reducedMotion ? "motion-reduced" : ""}`}
       >
+        <SceneCards
+          scene={
+            booting
+              ? "loading"
+              : room
+                ? `${room.code}:${room.status}:${room.roundNumber}:${room.game?.phase ?? ""}`
+                : "landing"
+          }
+          reduced={!!(prefs.reducedMotion || systemReduce)}
+        />
         <header className="site-header">
           <Link
             className="wordmark"
@@ -407,9 +446,13 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
                 ? "LOCAL DEVELOPMENT SERVER"
                 : "SUPABASE MULTIPLAYER"}
               <span>
-                {room.backend === "local"
-                  ? "Real shared rooms · this server only · rooms reset on restart"
-                  : "Private hands · server-authoritative play"}
+                {room.mode === "solo"
+                  ? "SOLO CHALLENGE · Beat your closest distance"
+                  : room.mode === "bots"
+                    ? "BOT TABLE · Computer opponents · Private hands"
+                    : room.backend === "local"
+                      ? "Real shared rooms · this server only · rooms reset on restart"
+                      : "Private hands · server-authoritative play"}
               </span>
             </div>
             {!connected && (
@@ -454,6 +497,14 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
               setError("");
             }}
             tutorial={tutorial}
+            solo={() => {
+              setEntry("solo");
+              setError("");
+            }}
+            bots={() => {
+              setEntry("bots");
+              setError("");
+            }}
           />
         )}
         <footer className="site-footer">
@@ -461,7 +512,7 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
             SUMMIN. <span className="muted">A little knowledge. An edge.</span>
           </span>
           <div>
-            <span>2–5 PLAYERS</span>
+            <span>SOLO · BOTS · FRIENDS</span>
             <i /> <span>ONE SHARED DECK</span>
             <i />
             <span>ENDLESS POSSIBILITIES</span>
@@ -487,7 +538,7 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
         {entry && !booting && !room && (
           <Entry
             mode={entry}
-            initialCode={initialCode}
+            initialCode={entryCode}
             error={error}
             busy={busy}
             submit={enter}
@@ -538,10 +589,14 @@ function Landing({
   create,
   join,
   tutorial,
+  solo,
+  bots,
 }: {
   create: () => void;
   join: () => void;
   tutorial: () => void;
+  solo: () => void;
+  bots: () => void;
 }) {
   return (
     <main className="landing">
@@ -573,9 +628,17 @@ function Landing({
               <Icon name="join" />
             </button>
           </div>
+          <div className="practice-buttons">
+            <button className="button secondary" onClick={solo}>
+              Solo challenge <Icon name="arrow" />
+            </button>
+            <button className="button secondary" onClick={bots}>
+              Play with bots <Icon name="users" />
+            </button>
+          </div>
           <div className="hero-meta">
             <span>
-              <Icon name="users" size={16} /> 2–5 friends
+              <Icon name="users" size={16} /> Solo, bots, or 2–5 friends
             </span>
             <span className="meta-dot" />
             <span>No accounts. Just play.</span>
@@ -590,15 +653,12 @@ function Landing({
           <span className="art-label label-top">
             THE ODDS ARE ALWAYS CHANGING.
           </span>
-          <div className="floating-card hero-card-one">
-            <PlayingCard card={exampleCard(13, "spades")} size="hero" silent />
-          </div>
-          <div className="floating-card hero-card-two">
-            <PlayingCard card={exampleCard(7, "diamonds")} size="hero" silent />
-          </div>
-          <div className="floating-card hero-card-three">
-            <PlayingCard card={null} size="hero" silent />
-          </div>
+          <div className="floating-card hero-card-one" data-scene-anchor="0" />
+          <div className="floating-card hero-card-two" data-scene-anchor="1" />
+          <div
+            className="floating-card hero-card-three"
+            data-scene-anchor="2"
+          />
           <div className="target-orb">
             <span>THE TARGET</span>
             <strong>
@@ -709,7 +769,7 @@ function Entry({
   submit,
   onClose,
 }: {
-  mode: "create" | "join";
+  mode: "create" | "join" | "solo" | "bots";
   initialCode?: string;
   error: string;
   busy: boolean;
@@ -717,30 +777,40 @@ function Entry({
     name: string,
     code: string,
     role: "player" | "spectator",
+    botCount?: number,
   ) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(""),
     [code, setCode] = useState(initialCode || ""),
-    [role, setRole] = useState<"player" | "spectator">("player");
+    [role, setRole] = useState<"player" | "spectator">("player"),
+    [botCount, setBotCount] = useState(2);
   return (
     <Modal
       title={
-        mode === "create"
-          ? "Good company. Great odds."
-          : "There’s a seat for you."
+        mode === "solo"
+          ? "Just you and the numbers."
+          : mode === "bots"
+            ? "Your table. Their poker faces."
+            : mode === "create"
+              ? "Good company. Great odds."
+              : "There’s a seat for you."
       }
       onClose={onClose}
     >
       <p className="muted">
-        {mode === "create"
-          ? "Create a private table, then share the invitation with friends."
-          : "Enter your invitation code. Join as a spectator if a round is already in play."}
+        {mode === "solo"
+          ? "A one-player target challenge. Take your time, learn the deck, and improve your closest distance. Targets 80–150; initial hands 8–15."
+          : mode === "bots"
+            ? "Play a full match against computer opponents. Bots see their own cards and the public table, just like you."
+            : mode === "create"
+              ? "Create a private table, then share the invitation with friends."
+              : "Enter your invitation code. Join as a spectator if a round is already in play."}
       </p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void submit(name, code, role);
+          void submit(name, code, role, botCount);
         }}
       >
         <label className="field-label" htmlFor="guest-name">
@@ -757,6 +827,24 @@ function Entry({
             onChange={(e) => setName(e.target.value)}
           />
         </label>
+        {mode === "bots" && (
+          <fieldset className="bot-count">
+            <legend>Computer opponents</legend>
+            <div className="choice-row">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  type="button"
+                  key={n}
+                  className={`choice ${botCount === n ? "selected" : ""}`}
+                  aria-pressed={botCount === n}
+                  onClick={() => setBotCount(n)}
+                >
+                  {n} {n === 1 ? "bot" : "bots"}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
         {mode === "join" && (
           <>
             <label className="field-label" htmlFor="invite-code">
@@ -808,9 +896,13 @@ function Entry({
         <button type="submit" className="button primary full" disabled={busy}>
           {busy
             ? "Connecting…"
-            : mode === "create"
-              ? "Create my room"
-              : "Join the room"}
+            : mode === "solo"
+              ? "Start solo challenge"
+              : mode === "bots"
+                ? "Start bot match"
+                : mode === "create"
+                  ? "Create my room"
+                  : "Join the room"}
           <Icon name="arrow" />
         </button>
         <p className="fine-print">
@@ -849,14 +941,32 @@ function Lobby({
     <main className="lobby">
       <div className="lobby-heading">
         <span className="eyebrow">THE TABLE IS YOURS</span>
-        <h1>Better with friends.</h1>
-        <p className="muted">Get everyone together. The numbers can wait.</p>
+        <SceneDeck />
+        <h1>
+          {room.mode === "solo"
+            ? "Your next closest call."
+            : room.mode === "bots"
+              ? "Ready for a rematch?"
+              : "Better with friends."}
+        </h1>
+        <p className="muted">
+          {room.mode === "friends"
+            ? "Get everyone together. The numbers can wait."
+            : "Your next round is ready when you are."}
+        </p>
       </div>
       <div className="lobby-grid">
         <section className="lobby-panel">
           <div className="panel-heading">
             <h2>Your table</h2>
-            <span className="badge">{players.length} / 5 PLAYERS</span>
+            <span className="badge">
+              {players.length}{" "}
+              {room.mode === "friends"
+                ? "/ 5 PLAYERS"
+                : room.mode === "solo"
+                  ? "SOLO PLAYER"
+                  : "PLAYERS · BOTS INCLUDED"}
+            </span>
           </div>
           <div className="player-list">
             {players.map((m, i) => (
@@ -885,14 +995,20 @@ function Lobby({
                 {room.hostId === m.id && <Icon name="crown" size={17} />}
               </div>
             ))}
-            {Array.from({ length: Math.max(0, 2 - players.length) }, (_, i) => (
-              <div className="empty-seat" key={i}>
-                <span className="avatar">
-                  <Icon name="plus" />
-                </span>
-                <span>Waiting for a friend…</span>
-              </div>
-            ))}
+            {Array.from(
+              {
+                length:
+                  room.mode === "friends" ? Math.max(0, 2 - players.length) : 0,
+              },
+              (_, i) => (
+                <div className="empty-seat" key={i}>
+                  <span className="avatar">
+                    <Icon name="plus" />
+                  </span>
+                  <span>Waiting for a friend…</span>
+                </div>
+              ),
+            )}
           </div>
           {spectators.length > 0 && (
             <div className="spectator-list">
@@ -915,7 +1031,7 @@ function Lobby({
                 {me.ready ? "I’m not ready yet" : "I’m ready"}
                 <Icon name="check" />
               </button>
-            ) : (
+            ) : room.mode === "friends" ? (
               <button
                 className="button primary"
                 disabled={busy || players.length >= 5}
@@ -926,13 +1042,17 @@ function Lobby({
                 Take an open seat
                 <Icon name="plus" />
               </button>
+            ) : (
+              <p className="muted">
+                You’re watching a practice table. Player seats are reserved.
+              </p>
             )}
             {isHost && (
               <button
                 className="button primary"
                 disabled={
                   busy ||
-                  connected.length < 2 ||
+                  connected.length < (room.mode === "solo" ? 1 : 2) ||
                   connected.some((m) => !m.ready)
                 }
                 onClick={() => {
@@ -945,20 +1065,34 @@ function Lobby({
             )}
           </div>
           <p className="fine-print">
-            {isHost
-              ? "Start when 2–5 connected players are ready. Disconnected seats become spectator seats for a new match."
-              : "The host will start when everyone is ready."}
+            {room.mode !== "friends"
+              ? "Ready your seat to start another practice round. Bots stay ready automatically."
+              : isHost
+                ? "Start when 2–5 connected players are ready. Disconnected seats become spectator seats for a new match."
+                : "The host will start when everyone is ready."}
           </p>
         </section>
         <aside>
           <div className="invite-panel">
             <span className="eyebrow">GOOD ODDS. BETTER COMPANY.</span>
             <h2>
-              Make it a<br />
-              full table.
+              {room.mode === "friends" ? (
+                <>
+                  Make it a<br />
+                  full table.
+                </>
+              ) : (
+                <>
+                  Share the
+                  <br />
+                  view.
+                </>
+              )}
             </h2>
             <p className="muted">
-              Send this code or share your private invitation link.
+              {room.mode === "friends"
+                ? "Send this code or share your private invitation link."
+                : "Friends can join as spectators. Practice player seats stay reserved."}
             </p>
             <button
               className="big-code"
@@ -1007,13 +1141,24 @@ function GameTable({
   const shownTotal =
     own?.hand.reduce((n, c) => n + (c.card?.value ?? 0), 0) ?? 0;
   return (
-    <main className="game-page">
+    <motion.main
+      className="game-page"
+      initial={{ opacity: 0, rotateX: 8, y: 35 }}
+      animate={{ opacity: 1, rotateX: 0, y: 0 }}
+      onAnimationComplete={() => window.dispatchEvent(new Event("resize"))}
+      transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div className="game-heading">
         <div>
           <span className="eyebrow">
             ROUND {game.round.toString().padStart(2, "0")}{" "}
             <span className="label-separator">/</span> {game.players.length}{" "}
-            PLAYERS {me.role === "spectator" && " / SPECTATING"}
+            {room.mode === "solo"
+              ? "PLAYER / SOLO CHALLENGE"
+              : room.mode === "bots"
+                ? "PLAYERS / BOT MATCH"
+                : "PLAYERS"}{" "}
+            {me.role === "spectator" && " / SPECTATING"}
           </span>
           <h1>
             {ended
@@ -1077,7 +1222,7 @@ function GameTable({
           </button>
         </div>
       )}
-      <div className="table-layout">
+      <div className={`table-layout seats-${opponents.length}`}>
         <div className="table-main">
           <section className="opponents" aria-label="Other players">
             {opponents.map((p, i) => (
@@ -1117,12 +1262,14 @@ function GameTable({
               >
                 {game.target}
               </motion.strong>
-              <span className="target-caption">CLOSEST TAKES IT.</span>
+              <span className="target-caption">
+                {room.mode === "solo"
+                  ? "BEAT YOUR BEST DISTANCE."
+                  : "CLOSEST TAKES IT."}
+              </span>
             </div>
             <div className="shared-deck">
-              <div className="deck-stack" data-deck>
-                <PlayingCard card={null} size="small" silent />
-              </div>
+              <SceneDeck />
               <span>
                 <strong>{game.deckCount}</strong> CARDS LEFT
               </span>
@@ -1165,13 +1312,24 @@ function GameTable({
               </div>
               <div className="own-cards">
                 {own.hand.length ? (
-                  own.hand.map((c) => (
-                    <PlayingCard
+                  own.hand.map((c, i) => (
+                    <motion.div
                       key={c.slotId}
-                      card={c.card}
-                      isPublic={c.public}
-                      delay={c.dealOrder * MOTION.dealStagger}
-                    />
+                      className="hand-card"
+                      style={{ rotateZ: (i - (own.hand.length - 1) / 2) * 1.2 }}
+                      whileHover={{ y: -15, rotateX: 8, scale: 1.07 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 22,
+                      }}
+                    >
+                      <PlayingCard
+                        card={c.card}
+                        isPublic={c.public}
+                        delay={c.dealOrder * MOTION.dealStagger}
+                      />
+                    </motion.div>
                   ))
                 ) : (
                   <div className="hand-placeholder">
@@ -1232,7 +1390,7 @@ function GameTable({
         </aside>
       </div>
       <History room={room} />
-    </main>
+    </motion.main>
   );
 }
 function PlayerHand({
@@ -1284,14 +1442,19 @@ function PlayerHand({
         </div>
       </div>
       <div className="opponent-cards">
-        {player.hand.map((c) => (
-          <PlayingCard
+        {player.hand.map((c, i) => (
+          <motion.div
             key={c.slotId}
-            card={c.card}
-            isPublic={c.public}
-            size="small"
-            delay={c.dealOrder * MOTION.dealStagger}
-          />
+            className="hand-card"
+            style={{ rotateZ: (i - (player.hand.length - 1) / 2) * 1.1 }}
+          >
+            <PlayingCard
+              card={c.card}
+              isPublic={c.public}
+              size="small"
+              delay={c.dealOrder * MOTION.dealStagger}
+            />
+          </motion.div>
         ))}
         {!player.hand.length && (
           <span className="muted empty-hand">
@@ -1318,7 +1481,7 @@ function Decision({
 }: RoomProps & { activeName: string | null }) {
   const game = room.game!,
     own = game.players.find((p) => p.id === room.me),
-    config = RULES[game.players.length as PlayerCount];
+    config = rulesFor(game.players.length);
   const [choice, setChoice] = useState(
     game.phase === "initial_selection" ? (config.initial[0] as number) : 0,
   );
@@ -1334,7 +1497,9 @@ function Decision({
       : Math.min(own?.cap ?? 0, game.deckCount);
   const message =
     room.members.find((m) => m.id === room.me)?.role === "spectator"
-      ? "You’re watching the public table. Player seats open between rounds."
+      ? room.mode === "friends"
+        ? "You’re watching the public table. Player seats open between rounds."
+        : "You’re watching a practice table. Player seats are reserved; hidden cards stay private."
       : selecting && own?.committed
         ? "Your choice is committed. The counts stay concealed until everyone is ready."
         : game.phase === "second_additions" && own?.cap === 0
@@ -1477,11 +1642,25 @@ function Results({ room, busy, send }: RoomProps) {
     >
       <span className="eyebrow">
         <Icon name="crown" size={16} />
-        {winners.length > 1 ? "SHARED VICTORY" : "THE CLOSEST CALL"}
+        {room.mode === "solo"
+          ? "YOUR TARGET CHALLENGE"
+          : winners.length > 1
+            ? "SHARED VICTORY"
+            : "THE CLOSEST CALL"}
       </span>
       <h2>
-        {winners.map((w) => playerName(w.playerId)).join(" & ")}{" "}
-        {winners.length > 1 ? "share the win." : "takes the round."}
+        {room.mode === "solo" ? (
+          winners[0].distance === 0 ? (
+            "Right on target."
+          ) : (
+            `${winners[0].distance} from the target.`
+          )
+        ) : (
+          <>
+            {winners.map((w) => playerName(w.playerId)).join(" & ")}{" "}
+            {winners.length > 1 ? "share the win." : "takes the round."}
+          </>
+        )}
       </h2>
       <p className="muted">
         {winners[0].distance === 0
@@ -1489,6 +1668,8 @@ function Results({ room, busy, send }: RoomProps) {
           : `${winners[0].distance} away from ${game.target}.`}
         {game.tiebreakApplied &&
           " Tiebreak: below the target beats above at equal distance."}
+        {room.mode === "solo" &&
+          ` Best distance at this table: ${Math.min(...room.history.flatMap((round) => round.results.filter((result) => result.playerId === room.me).map((result) => result.distance)), winners[0].distance)}.`}
       </p>
       <div className="results-table" role="table" aria-label="Final totals">
         <div className="results-row results-labels" role="row">
@@ -1515,11 +1696,13 @@ function Results({ room, busy, send }: RoomProps) {
               {r.distance} <small>{r.side}</small>
             </span>
             <span role="cell">
-              {r.winner
-                ? winners.length > 1
-                  ? "Shared win"
-                  : "Winner"
-                : "Next time"}
+              {room.mode === "solo"
+                ? "Recorded"
+                : r.winner
+                  ? winners.length > 1
+                    ? "Shared win"
+                    : "Winner"
+                  : "Next time"}
             </span>
           </motion.div>
         ))}
@@ -1532,7 +1715,7 @@ function Results({ room, busy, send }: RoomProps) {
               busy ||
               room.members.filter(
                 (m) => m.role === "player" && m.disconnectedAt === null,
-              ).length < 2
+              ).length < (room.mode === "solo" ? 1 : 2)
             }
             onClick={() => {
               void send({ type: "start" });
@@ -1551,18 +1734,19 @@ function Results({ room, busy, send }: RoomProps) {
         >
           Return to lobby
         </button>
-        {room.members.find((m) => m.id === room.me)?.role === "spectator" && (
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() => {
-              void send({ type: "claim" });
-            }}
-          >
-            Take an open seat
-            <Icon name="plus" />
-          </button>
-        )}
+        {room.mode === "friends" &&
+          room.members.find((m) => m.id === room.me)?.role === "spectator" && (
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() => {
+                void send({ type: "claim" });
+              }}
+            >
+              Take an open seat
+              <Icon name="plus" />
+            </button>
+          )}
       </div>
       <p className="fine-print">
         {game.deckCount} cards remain. The starting player rotates next round.

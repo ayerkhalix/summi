@@ -1,9 +1,4 @@
-import {
-  FIRST_ADDITION_MAX,
-  RULES,
-  secondCap,
-  type PlayerCount,
-} from "./config";
+import { FIRST_ADDITION_MAX, rulesFor, secondCap } from "./config";
 import { createDeck, shuffle } from "./deck";
 import type {
   GamePlayer,
@@ -41,7 +36,22 @@ export function makeRound(
     ids.length >= 2 && ids.length <= 5 && new Set(ids).size === ids.length,
     "A round needs 2–5 distinct players.",
   );
-  const range = RULES[ids.length as PlayerCount];
+  return createRound(ids, round, starterIndex, random);
+}
+export function makeSoloRound(
+  id: string,
+  round: number,
+  random: RandomInt,
+): GameState {
+  return createRound([id], round, 0, random);
+}
+function createRound(
+  ids: string[],
+  round: number,
+  starterIndex: number,
+  random: RandomInt,
+): GameState {
+  const range = rulesFor(ids.length);
   const order = [
     ...ids.slice(starterIndex % ids.length),
     ...ids.slice(0, starterIndex % ids.length),
@@ -213,7 +223,7 @@ export function act(
       p.initialCount === null,
       "Your initial choice is already committed.",
     );
-    const [min, max] = RULES[s.players.length as PlayerCount].initial;
+    const [min, max] = rulesFor(s.players.length).initial;
     requireRule(
       command.count >= min && command.count <= max,
       `Choose between ${min} and ${max} cards.`,
