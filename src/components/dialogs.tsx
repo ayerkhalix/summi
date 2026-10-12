@@ -8,7 +8,7 @@ import {
 } from "react";
 import { audio, DEFAULT_AUDIO, SOUNDS } from "@/audio/manager";
 import { act, advance, makeRound } from "@/game/engine";
-import { RULES } from "@/game/config";
+import { FIRST_ADDITION_MAX, RULES, secondCap } from "@/game/config";
 import { Icon } from "./icon";
 import { PlayingCard } from "./card";
 
@@ -195,14 +195,14 @@ export function Rules({
           <p>
             Cards start face down, hidden from everyone, including you. Half
             your initial cards, rounded down, are revealed. On your turn,
-            add 0–3 cards. Zero is a final pass for that addition window. The
+            add 0–4 cards. Zero is a final pass for that addition window. The
             next reveal leaves exactly one hidden card.
           </p>
           <h3>03 / Make your final call</h3>
           <p>
             Your final addition limit is half the cards you actually received in
-            the first window, rounded down: 0, 0, 1, 1. Players with zero are
-            automatically skipped. Then every remaining card is revealed.
+            the first window, rounded down, plus one: 1, 1, 2, 2, 3. All draws
+            are limited by the shared deck. Then the last cards reveal one at a time.
           </p>
         </div>
         <div>
@@ -232,14 +232,17 @@ export function Rules({
           </table>
           <h3>Closest wins. Either side.</h3>
           <p>
-            The smallest absolute difference wins. At equal distance, below
-            beats above. Same-side ties share the win. An exact match beats
-            every non-exact total. Going over never automatically loses.
+            The smallest absolute difference wins. Equal distance shares the win,
+            above or below. Points follow rank: with five players, 5, 4, 3, 2, 1.
+            Ties earn the same points. The highest points total after the chosen
+            3, 5, 10, 12, 15 or 20 rounds wins the match. Shared round wins count toward streaks;
+            three consecutive wins light up your icon and hand.
           </p>
         </div>
       </div>
       <p className="notice">
-        No turn timer. A lost connection pauses the match for a 90-second grace
+        Results appear three seconds after the last animated flip. The next round
+        starts automatically after a 30-second break. No decision timer. A lost connection pauses the match for a 90-second grace
         period after the server detects the disconnection. If the player cannot
         return, the match ends and completed rounds remain saved.
       </p>
@@ -260,7 +263,7 @@ const tutorialCopy = [
   ],
   [
     "Choose your starting hand.",
-    "With two players, choose 8–15 cards. Your choice stays concealed until everyone commits. Cards are dealt one per player in rotating order.",
+    "With two players, choose 7–16 cards. Your choice stays concealed until everyone commits. Cards are dealt one per player in rotating order.",
   ],
   [
     "Half the picture.",
@@ -268,7 +271,7 @@ const tutorialCopy = [
   ],
   [
     "Add, or hold your nerve.",
-    "Choose 0–3 additional cards. They stay face down until the next reveal. Choosing zero is final for this window. You cannot reopen it.",
+    "Choose 0–4 additional cards. They stay face down until the next reveal. Choosing zero is final for this window. You cannot reopen it.",
   ],
   [
     "One secret remains.",
@@ -276,11 +279,11 @@ const tutorialCopy = [
   ],
   [
     "Your last decision.",
-    "Your cap is floor(first-window cards actually received ÷ 2). Adding 0 or 1 earlier means no second addition. Adding 2 or 3 allows at most 1.",
+    "Your cap is floor(first-window cards actually received ÷ 2) + 1. Adding 0 or 1 earlier allows one final card, 2 or 3 allows two, and 4 allows three. An empty shared deck prevents further draws.",
   ],
   [
     "All cards on the table.",
-    "Every remaining card becomes public. The server counts each card once. Closest wins; below beats above at equal distance, and same-side ties share the win.",
+    "The final cards turn over one at a time. Closest wins; equal distance shares victory above or below. Rank-based points add to the match scoreboard before a 30-second break.",
   ],
 ];
 export function Tutorial({ onClose }: { onClose: () => void }) {
@@ -322,14 +325,15 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
         id,
         {
           type: "add",
-          count: id === "you" ? Math.min(last, Math.floor(addition / 2)) : 0,
+          count: id === "you" ? Math.min(last, secondCap(addition)) : 0,
           round: 1,
           phase: g.phase,
         },
         rng,
       );
     }
-    return advance(g, rng);
+    while (g.phase === "final_reveal") g = advance(g, rng);
+    return g;
   }, [step, initial, addition, last]);
   const own = state.players[0],
     total = own.hand.reduce((n, c) => n + (c.revealed ? c.card.value : 0), 0);
@@ -385,8 +389,8 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
           Your initial hand: {initial} cards
           <input
             type="range"
-            min="8"
-            max="15"
+            min={RULES[2].initial[0]}
+            max={RULES[2].initial[1]}
             value={initial}
             onChange={(e) => setInitial(Number(e.target.value))}
           />
@@ -394,7 +398,7 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
       )}
       {step === 4 && (
         <div className="choice-row">
-          {[0, 1, 2, 3].map((n) => (
+          {Array.from({ length: FIRST_ADDITION_MAX + 1 }, (_, n) => n).map((n) => (
             <button
               key={n}
               className={`choice ${addition === n ? "selected" : ""}`}
@@ -407,21 +411,15 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
       )}
       {step === 6 && (
         <div className="choice-row">
-          {Math.floor(addition / 2) === 0 ? (
-            <p className="notice">
-              Your cap is zero, so the engine skips this decision automatically.
-            </p>
-          ) : (
-            [0, 1].map((n) => (
+          {Array.from({ length: secondCap(addition) + 1 }, (_, n) => n).map((n) => (
               <button
                 key={n}
                 className={`choice ${last === n ? "selected" : ""}`}
                 onClick={() => setLast(n)}
               >
-                {n === 0 ? "Pass" : "+1"}
+                {n === 0 ? "Pass" : `+${n}`}
               </button>
-            ))
-          )}
+            ))}
         </div>
       )}
       {step === 7 && (

@@ -4,9 +4,11 @@ import {
   advance,
   makeRound,
   projectGame,
+  score,
 } from "@/game/engine";
 import { botDecision } from "@/game/bot";
-import { TIMING } from "@/game/config";
+import { DEFAULT_ROUND_LIMIT, ROUND_LIMITS, TIMING, type RoundLimit } from "@/game/config";
+import { DEFAULT_PROFILE, PLAYER_ICONS, PROFILE_COLORS, type PlayerProfile } from "@/game/profile";
 import { ApiError } from "./errors";
 import type {
   GameMode,
@@ -15,6 +17,7 @@ import type {
   RoomCommand,
   RoomStore,
   RoomView,
+  Standing,
 } from "./types";
 
 export const hashToken = (token: string) =>
@@ -35,6 +38,53 @@ function member(room: Room, tokenHash: string) {
 function checkExpiry(room: Room, now: number) {
   if (now - room.lastActivity > 86400000)
     throw new ApiError(410, "This room has expired. Create a new room.");
+}
+function normalizeRoom(room: Room) {
+  // Rooms already saved in Supabase can finish without a database migration.
+  room.roundLimit ??= DEFAULT_ROUND_LIMIT;
+  room.matchStartRound ??= Math.max(1, room.roundNumber);
+  room.matchNumber ??= room.roundNumber ? 1 : 0;
+  // Upgrade completed results from rooms created before match points and fair
+  // cross-target ties were introduced. Keep their original names and totals.
+  for (const round of room.history) {
+    if (round.results.some((r) => r.points === undefined || r.rank === undefined)) {
+      const repaired = score(round.results, round.target).results;
+      round.results = round.results.map((r) => ({ ...r, ...repaired.find((next) => next.playerId === r.playerId)! }));
+    }
+  }
+  if (room.game?.results.length && (room.game.tiebreakApplied || room.game.results.some((r) => r.points === undefined || r.rank === undefined))) {
+    room.game.results = score(room.game.results, room.game.target).results;
+    room.game.tiebreakApplied = false;
+  }
+}
+function matchRounds(room: Room) {
+  return room.history.filter((round) => round.round >= room.matchStartRound);
+}
+function matchComplete(room: Room) {
+  return matchRounds(room).length >= room.roundLimit;
+}
+export function standings(room: Room): Standing[] {
+  const rounds = matchRounds(room);
+  const ids = new Set([
+    ...room.members.filter((m) => m.role === "player").map((m) => m.id),
+    ...rounds.flatMap((round) => round.results.map((r) => r.playerId)),
+  ]);
+  const rows = [...ids].map((playerId) => {
+    const m = room.members.find((m) => m.id === playerId);
+    let points = 0, wins = 0, streak = 0;
+    for (const round of rounds) {
+      const result = round.results.find((r) => r.playerId === playerId);
+      if (result) {
+        // Older saved results predate points; rank them by absolute distance.
+        points += result.points ?? round.results.length - round.results.filter((r) => r.distance < result.distance).length;
+        if (result.winner) wins++;
+      }
+      streak = result?.winner ? streak + 1 : 0;
+    }
+    return { playerId, name: m?.name ?? rounds.flatMap((r) => r.results).find((r) => r.playerId === playerId)?.name ?? "Former player", profile: m?.profile ?? DEFAULT_PROFILE, points, wins, streak, rank: 1 };
+  });
+  for (const row of rows) row.rank = 1 + rows.filter((other) => other.points > row.points).length;
+  return rows.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 }
 function reconnectMember(room: Room, m: Member, now: number) {
   m.lastSeen = now;
@@ -61,7 +111,7 @@ export function migrateHost(room: Room) {
       ?.id ?? null;
 }
 export function pausedPlayers(room: Room) {
-  if (room.status !== "playing" || !room.game) return [];
+  if ((room.status !== "playing" && !(room.status === "results" && !matchComplete(room))) || !room.game) return [];
   return room.members
     .filter(
       (m) =>
@@ -80,6 +130,7 @@ function endMatch(room: Room, reason: string) {
   room.autoAt = null;
 }
 export function maintain(room: Room, now: number): Room {
+  normalizeRoom(room);
   checkExpiry(room, now);
   for (const m of room.members)
     if (
@@ -108,6 +159,20 @@ export function maintain(room: Room, now: number): Room {
         m.ready = false;
       }
     migrateHost(room);
+    // A fixed match roster must not strand spectators when every player has
+    // left or their seat reservation has expired. Keep the completed history.
+    if ((room.mode ?? "friends") === "friends" && room.status !== "lobby" && !room.members.some((m) => m.role === "player")) {
+      room.status = "lobby";
+      room.autoAt = null;
+      room.endedReason = null;
+    }
+  }
+  if (room.status === "results" && !matchComplete(room) && room.autoAt !== null && now >= room.autoAt) {
+    const players = room.members.filter((m) => room.game?.players.some((p) => p.id === m.id));
+    // Keep the same roster and pause the break while someone reconnects.
+    if (players.length === room.game?.players.length && players.every((m) => m.role === "player" && m.ready && m.disconnectedAt === null))
+      startRound(room, now);
+    return room;
   }
   if (
     room.status === "playing" &&
@@ -125,7 +190,6 @@ export function maintain(room: Room, now: number): Room {
       if (bot && decision)
         room.game = act(room.game, bot.id, decision, randomInt);
     }
-    setAutomatic(room, now);
     if (room.game.phase === "round_results") {
       room.status = "results";
       room.history.push({
@@ -140,17 +204,25 @@ export function maintain(room: Room, now: number): Room {
         deckCount: room.game.deck.length,
         completedAt: now,
       });
-      room.history = room.history.slice(-50);
+      // Retain every result in the current match, plus recent table history.
+      room.history = room.history.slice(-100);
     }
+    setAutomatic(room, now);
   }
   return room;
 }
 function setAutomatic(room: Room, now: number) {
+  if (room.status === "results") {
+    room.autoAt = matchComplete(room) ? null : now + TIMING.nextRound;
+    return;
+  }
+  const final = room.game?.phase === "final_reveal";
+  const finalHidden = room.game?.players.some((p) => p.hand.some((c) => !c.revealed));
   room.autoAt =
     room.status === "playing" &&
     room.game &&
     (automatic.has(room.game.phase) || pendingBot(room))
-      ? now + (automatic.has(room.game.phase) ? TIMING.automaticPhase : 900)
+      ? now + (final ? finalHidden ? TIMING.finalCard : TIMING.finalHold : automatic.has(room.game.phase) ? TIMING.automaticPhase : 900)
       : null;
 }
 function pendingBot(room: Room) {
@@ -168,6 +240,10 @@ function pendingBot(room: Room) {
   );
 }
 function startRound(room: Room, now: number) {
+  if (room.status === "results" && matchComplete(room))
+    throw new ApiError(409, "This match is complete. Return to the lobby for a new match.");
+  if (room.status === "abandoned")
+    throw new ApiError(409, "Return to the lobby to start a new match.");
   const players = room.members.filter(
     (m) => m.role === "player" && m.disconnectedAt === null,
   );
@@ -186,6 +262,8 @@ function startRound(room: Room, now: number) {
       former.ready = false;
     }
   const ids = players.map((p) => p.id);
+  if (room.status === "results" && (ids.length !== room.game?.players.length || room.game.players.some((p) => !ids.includes(p.id))))
+    throw new ApiError(409, "Wait for every match player to reconnect, or return to the lobby.");
   const previous = room.previousStarter
     ? ids.indexOf(room.previousStarter)
     : -1;
@@ -195,6 +273,10 @@ function startRound(room: Room, now: number) {
       : room.roundNumber
         ? 0
         : randomInt(ids.length);
+  if (room.status === "lobby") {
+    room.matchStartRound = room.roundNumber + 1;
+    room.matchNumber++;
+  }
   room.game = makeRound(ids, ++room.roundNumber, starter, randomInt);
   room.previousStarter = ids[starter];
   room.status = "playing";
@@ -206,6 +288,7 @@ export function viewRoom(
   tokenHash: string,
   backend: RoomStore["kind"],
 ): RoomView {
+  normalizeRoom(room);
   const me = member(room, tokenHash);
   return {
     id: room.id,
@@ -222,10 +305,21 @@ export function viewRoom(
     backend,
     me: me.id,
     paused: pausedPlayers(room),
+    roundLimit: room.roundLimit,
+    matchStartRound: room.matchStartRound,
+    matchNumber: room.matchNumber,
+    match: {
+      round: room.roundNumber ? room.roundNumber - room.matchStartRound + 1 : 1,
+      roundLimit: room.roundLimit,
+      complete: matchComplete(room),
+      standings: standings(room),
+      nextRoundAt: room.status === "results" ? room.autoAt : null,
+    },
     members: room.members.map((m) => ({
       id: m.id,
       isBot: !!m.isBot,
       name: m.name,
+      profile: m.profile ?? DEFAULT_PROFILE,
       role: m.role,
       ready: m.ready,
       joinedAt: m.joinedAt,
@@ -242,11 +336,13 @@ export class RoomService {
   async create(
     name: string,
     tokenHash: string,
-    options: { mode?: GameMode; botCount?: number } = {},
+    options: { mode?: GameMode; botCount?: number; roundLimit?: RoundLimit; profile?: PlayerProfile } = {},
   ) {
     const now = this.now();
     const mode = options.mode ?? "friends";
     const botCount = options.botCount ?? 2;
+    const roundLimit = options.roundLimit ?? DEFAULT_ROUND_LIMIT;
+    if (!ROUND_LIMITS.includes(roundLimit)) throw new ApiError(400, "Choose 3, 5, 10, 12, 15 or 20 rounds.");
     if (!["friends", "bots"].includes(mode))
       throw new ApiError(400, "Choose friends or bot mode.");
     if (
@@ -258,6 +354,7 @@ export class RoomService {
       id: randomUUID(),
       tokenHash,
       name: mode === "bots" && !name.trim() ? "You" : name,
+      profile: options.profile ?? DEFAULT_PROFILE,
       role: "player",
       ready: mode !== "friends",
       joinedAt: now,
@@ -286,6 +383,9 @@ export class RoomService {
         processed: [],
         roundNumber: 0,
         previousStarter: null,
+        roundLimit,
+        matchStartRound: 1,
+        matchNumber: 0,
       };
       if (mode === "bots")
         for (let i = 0; i < botCount; i++)
@@ -299,6 +399,7 @@ export class RoomService {
             lastSeen: now,
             disconnectedAt: null,
             isBot: true,
+            profile: { icon: PLAYER_ICONS[i + 1], color: PROFILE_COLORS[i] },
           });
       if (mode !== "friends") startRound(room, now);
       if (await this.store.create(room))
@@ -311,6 +412,7 @@ export class RoomService {
     name: string,
     role: Member["role"],
     tokenHash: string,
+    profile: PlayerProfile = DEFAULT_PROFILE,
   ) {
     const now = this.now();
     const room = await this.store.update(code, (room) => {
@@ -328,10 +430,10 @@ export class RoomService {
         );
       if (room.members.length >= 25)
         throw new ApiError(409, "This room has reached its spectator limit.");
-      if (role === "player" && room.status === "playing")
+      if (role === "player" && room.status !== "lobby")
         throw new ApiError(
           409,
-          "This round is in progress. Join as a spectator, then request a seat between rounds.",
+          "This match has started. Join as a spectator, then request a seat in the lobby.",
         );
       if (
         role === "player" &&
@@ -345,6 +447,7 @@ export class RoomService {
         id: randomUUID(),
         tokenHash,
         name,
+        profile,
         role,
         ready: false,
         joinedAt: now,
@@ -361,13 +464,15 @@ export class RoomService {
     const current = await this.store.get(code);
     if (!current)
       throw new ApiError(404, "Room not found. Check the invitation code.");
+    normalizeRoom(current);
     member(current, tokenHash);
     checkExpiry(current, this.now());
     const now = this.now();
     const needsMaintenance =
       (current.autoAt !== null &&
         now >= current.autoAt &&
-        pausedPlayers(current).length === 0) ||
+        pausedPlayers(current).length === 0 &&
+        (current.status !== "results" || current.members.filter((m) => current.game?.players.some((p) => p.id === m.id)).every((m) => m.disconnectedAt === null))) ||
       current.members.some(
         (m) =>
           (!m.isBot &&
@@ -408,13 +513,20 @@ export class RoomService {
       }
       migrateHost(room);
       switch (command.type) {
+        case "settings":
+          if (room.hostId !== m.id) throw new ApiError(403, "Only the host can change the round limit.");
+          if (room.status !== "lobby") throw new ApiError(409, "Round settings can only change in the lobby.");
+          if (!ROUND_LIMITS.includes(command.roundLimit)) throw new ApiError(400, "Choose a supported round limit.");
+          room.roundLimit = command.roundLimit;
+          for (const player of room.members) player.ready = !!player.isBot;
+          break;
         case "heartbeat":
           break;
         case "ready":
-          if (room.status === "playing" || m.role !== "player")
+          if (room.status !== "lobby" || m.role !== "player")
             throw new ApiError(
               409,
-              "Ready status can only change between rounds.",
+              "Ready status can only change in the lobby.",
             );
           m.ready = command.ready;
           break;
@@ -453,6 +565,7 @@ export class RoomService {
               "Finish or leave the current match before returning to the lobby.",
             );
           room.status = "lobby";
+          room.autoAt = null;
           room.endedReason = null;
           // Keep the previous game and history until the next round explicitly starts.
           for (const player of room.members) player.ready = !!player.isBot;
@@ -463,10 +576,10 @@ export class RoomService {
               409,
               "Practice tables are reserved for their original player.",
             );
-          if (room.status === "playing")
+          if (room.status !== "lobby")
             throw new ApiError(
               409,
-              "Player seats can only be claimed between rounds.",
+              "Player seats can only be claimed between matches in the lobby.",
             );
           if (m.role === "player")
             throw new ApiError(409, "You already have a player seat.");
@@ -477,7 +590,7 @@ export class RoomService {
           migrateHost(room);
           break;
         case "leave":
-          if (room.status === "playing" && m.role === "player")
+          if ((room.status === "playing" || (room.status === "results" && !matchComplete(room))) && m.role === "player")
             endMatch(
               room,
               `${m.name} left the match. Completed round history is preserved.`,

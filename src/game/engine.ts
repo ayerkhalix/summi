@@ -53,6 +53,7 @@ export function makeRound(
     events: [],
     results: [],
     tiebreakApplied: false,
+    finalReveal: null,
     players: ids.map((id) => ({
       id,
       hand: [],
@@ -95,10 +96,17 @@ function reveal(s: GameState, p: GamePlayer, count: number, random: RandomInt) {
       p.id,
     );
 }
-function finalReveal(s: GameState, random: RandomInt) {
+function finalReveal(s: GameState) {
   s.phase = "final_reveal";
-  for (const p of s.players)
-    reveal(s, p, p.hand.filter((c) => !c.revealed).length, random);
+  s.finalReveal = {
+    total: s.players.reduce((n, p) => n + p.hand.filter((c) => !c.revealed).length, 0),
+    revealed: 0,
+    lastSlotId: null,
+  };
+  // Results must not expose hidden totals during the card-by-card reveal.
+  s.results = [];
+}
+function resolve(s: GameState) {
   const resolution = score(
     s.players.map((p) => ({
       playerId: p.id,
@@ -120,18 +128,15 @@ export function score(
     "Scoring requires integer totals.",
   );
   const distance = Math.min(...totals.map((t) => Math.abs(t.total - target)));
-  const closest = totals.filter((t) => Math.abs(t.total - target) === distance);
-  const preferBelow = closest.some((t) => t.total < target);
-  const tiebreakApplied = preferBelow && closest.some((t) => t.total > target);
   return {
-    tiebreakApplied,
+    tiebreakApplied: false,
     results: totals.map((t) => ({
       ...t,
       distance: Math.abs(t.total - target),
       side: t.total < target ? "below" : t.total > target ? "above" : "exact",
-      winner:
-        Math.abs(t.total - target) === distance &&
-        (!preferBelow || t.total <= target),
+      winner: Math.abs(t.total - target) === distance,
+      rank: 1 + totals.filter((other) => Math.abs(other.total - target) < Math.abs(t.total - target)).length,
+      points: totals.length - totals.filter((other) => Math.abs(other.total - target) < Math.abs(t.total - target)).length,
     })),
   };
 }
@@ -154,12 +159,12 @@ export function advance(state: GameState, random: RandomInt): GameState {
       s.phase = "second_additions";
       s.cursor = 0;
       for (const p of s.players)
-        if (secondCap(p.firstReceived) === 0) {
+        if (Math.min(secondCap(p.firstReceived), s.deck.length) === 0) {
           p.secondDone = true;
           event(
             s,
             "skip",
-            "No final addition: fewer than two cards received in the first addition.",
+            "No final addition: the shared deck is empty.",
             p.id,
           );
         }
@@ -168,13 +173,28 @@ export function advance(state: GameState, random: RandomInt): GameState {
         s.players.find((p) => p.id === s.order[s.cursor])!.secondDone
       )
         s.cursor++;
-      if (s.cursor === s.order.length) finalReveal(s, random);
+      if (s.cursor === s.order.length) finalReveal(s);
       break;
     }
-    case "final_reveal":
+    case "final_reveal": {
+      // Deal order is stable across every client and reconnect. Only one face
+      // enters the public projection per server transition.
+      const next = s.players.flatMap((p) => p.hand.map((held, index) => ({ p, held, index })))
+        .filter(({ held }) => !held.revealed)
+        .sort((a, b) => a.held.dealOrder - b.held.dealOrder)[0];
+      if (next) {
+        s.finalReveal ??= { total: s.players.reduce((n, p) => n + p.hand.filter((c) => !c.revealed).length, 0), revealed: 0, lastSlotId: null };
+        next.held.revealed = true;
+        s.finalReveal.revealed++;
+        s.finalReveal.lastSlotId = `${s.round}:${next.p.id}:${next.index}`;
+        event(s, "reveal", "The final card turns over.", next.p.id);
+        break;
+      }
+      resolve(s);
       s.phase = "round_results";
       event(s, "result", "Round complete. Closest to the target wins.");
       break;
+    }
     default:
       throw new RuleError("This phase is waiting for a player decision.");
   }
@@ -273,7 +293,7 @@ export function act(
             random,
           );
         s.phase = "second_reveal";
-      } else finalReveal(s, random);
+      } else finalReveal(s);
     }
   }
   assertInventory(s);

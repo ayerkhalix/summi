@@ -1,0 +1,81 @@
+/* Match identity and pacing share the application palette. */
+.app .player-avatar {
+  position: relative;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  color: var(--player-color);
+  border: 1px solid color-mix(in srgb, var(--player-color) 50%, var(--line));
+  background: color-mix(in srgb, var(--player-color) 12%, var(--surface));
+}
+.player-avatar > svg { width: 20px; height: 20px; }
+.player-avatar > b { font-family: Georgia, serif; font-size: 23px; }
+.player-avatar > small {
+  position: absolute; right: -5px; bottom: -5px; display: grid; place-items: center;
+  min-width: 19px; height: 19px; padding: 0 3px; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent); font: 700 10px Arial, sans-serif;
+}
+.app .streak-avatar { box-shadow: 0 0 0 3px var(--secondary-soft), 0 0 18px color-mix(in srgb, var(--rose) 25%, transparent); }
+.app .opponent.on-streak, .app .own-hand.on-streak {
+  border-color: var(--rose);
+  box-shadow: inset 0 0 28px color-mix(in srgb, var(--accent) 7%, transparent), 0 0 0 1px var(--secondary);
+}
+.streak-label { color: var(--accent-text); }
+.profile-picker { border: 0; padding: 0; margin: 20px 0; min-width: 0; }
+.profile-picker legend { font-size: 12px; margin-bottom: 10px; color: var(--text-soft); }
+.icon-options { display: flex; flex-wrap: wrap; gap: 5px; }
+.icon-option { padding: 4px; border: 1px solid transparent; border-radius: 9px; }
+.icon-option.selected { border-color: var(--text-soft); background: var(--surface-2); }
+.profile-colors { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.color-swatch { width: 30px; height: 30px; border-radius: 50%; border: 5px solid var(--surface); outline: 1px solid var(--line); }
+.color-swatch[aria-pressed="true"] { outline: 2px solid var(--text); }
+.profile-colors label { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 11px; color: var(--muted); }
+.profile-colors input { width: 35px; height: 35px; padding: 3px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+.match-scoreboard { margin: 18px 0; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.scoreboard-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; }
+.match-scoreboard ol { list-style: none; margin: 10px 0 0; padding: 0; }
+.match-scoreboard li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 0; }
+.standing-rank { width: 18px; color: var(--muted); font-size: 12px; }
+.standing-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.standing-name small, .match-scoreboard strong small { color: var(--muted); font-size: 9px; font-weight: 400; }
+.standing-name .streak-label { display: block; color: var(--accent-text); }
+.app .match-scoreboard.compact { margin: 0 0 12px; padding: 8px 12px; }
+.compact .scoreboard-heading { display: none; }
+.compact ol { display: flex; gap: 18px; overflow-x: auto; margin: 0; }
+.compact li { flex: 1 0 140px; padding: 2px 0; gap: 8px; height: 40px; }
+.compact .standing-rank { display: none; }
+.app .compact .player-avatar { width: 28px; height: 28px; flex-basis: 28px; }
+.compact .player-avatar > svg { width: 16px; height: 16px; }
+.compact .player-avatar > b { font-size: 18px; }
+.compact .standing-name { font-size: 12px; }
+.app .turn-area { min-height: 320px; }
+.app .final-reveal-stage { position: relative; gap: 6px; overflow: hidden; border-color: var(--secondary); background: radial-gradient(ellipse at 50% 50%, var(--secondary-soft), var(--surface)); }
+.reveal-card-space { display: grid; place-items: center; width: 100%; height: 184px; perspective: 1000px; }
+.reveal-spotlight { transform-style: preserve-3d; filter: drop-shadow(0 8px 16px color-mix(in srgb, var(--shadow) 45%, transparent)); }
+.app .reveal-spotlight .playing-card { --card-w: 118px; --card-h: 165.2px; }
+.final-reveal-stage > strong { font-family: Georgia, serif; font-size: 20px; }
+.final-reveal-stage > p { font-size: 11px; color: var(--muted); }
+.reveal-progress { width: 100%; height: 2px; margin-top: 9px; background: var(--line); }
+.reveal-progress > span { display: block; height: 100%; background: var(--rose); transition: width .5s ease; }
+.final-card-highlight .playing-card { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--rose) 65%, transparent)); }
+.next-round-timer { font-size: 12px; color: var(--muted); margin-top: 10px; text-align: center; font-variant-numeric: tabular-nums; }
+.next-round-timer strong { color: var(--text); }
+.match-champions { text-align: center; padding: 18px 10px; border-block: 1px solid var(--secondary); background: var(--secondary-soft); margin-bottom: 14px; }
+.match-champions p { color: var(--muted); }
+.results-panel .round-victory > .eyebrow, .results-panel .match-champions > .eyebrow {
+  display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--accent-text);
+}
+.app .results-row > span:last-child { color: var(--text); font-weight: 600; }
+@media (max-width: 700px) {
+  .app .turn-area { min-height: 232px; }
+  .app .final-reveal-stage { gap: 3px; padding-block: 10px; }
+  .reveal-card-space { height: 126px; }
+  .app .reveal-spotlight .playing-card { --card-w: 82px; --card-h: 114.8px; }
+  .final-reveal-stage > strong { font-size: 18px; }
+  .compact ol { gap: 12px; }
+  .compact li { flex-basis: 124px; }
+  .app .compact .player-avatar { flex-basis: 26px; width: 26px; height: 26px; }
+  .app .hand-heading .player-avatar.streak-avatar { display: inline-flex; }
+  .profile-colors { gap: 5px; }
+  .color-swatch { width: 35px; height: 35px; }
+}

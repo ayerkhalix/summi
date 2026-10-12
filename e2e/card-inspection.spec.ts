@@ -24,7 +24,7 @@ for (const width of [1440, 390]) {
     await expect(dialog).toBeVisible();
     expect((await dialog.locator(".playing-card").boundingBox())!.width).toBeGreaterThanOrEqual(180);
     await dialog.getByRole("button", { name: "Close dialog" }).click();
-    await page.getByRole("button", { name: "Confirm 8 cards", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm 7 cards", exact: true }).click();
     await expect(page.getByRole("heading", { name: "First addition", exact: true })).toBeVisible();
     const initial = await page.evaluate(() => ({ height: document.documentElement.scrollHeight, y: scrollY }));
     const hidden = page.locator('.opponent-cards .card-inspect-button:has([data-card="hidden"])').first();

@@ -1,4 +1,4 @@
-import { rulesFor } from "./config";
+import { FIRST_ADDITION_MAX, rulesFor } from "./config";
 import type { GameView, PlayerCommand } from "./types";
 
 // The policy accepts a privacy-filtered view, never the authoritative deck.
@@ -29,7 +29,7 @@ export function botDecision(game: GameView, id: string): PlayerCommand | null {
     for (const held of player.hand) if (held.card) ranks[held.card.rank]--;
   const total = own.hand.reduce((n, held) => n + (held.card?.value ?? 0), 0);
   const cap = Math.min(
-    game.phase === "first_additions" ? 3 : own.cap,
+    game.phase === "first_additions" ? FIRST_ADDITION_MAX : own.cap,
     game.deckCount,
   );
   // Existing face-down cards are unknown too. Count equally likely subsets

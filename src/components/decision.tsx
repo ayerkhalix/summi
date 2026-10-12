@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { audio } from "@/audio/manager";
-import { PHASE_LABELS, rulesFor } from "@/game/config";
+import { FIRST_ADDITION_MAX, PHASE_LABELS, rulesFor } from "@/game/config";
 import { Icon } from "./icon";
 import type { RoomProps } from "./table-shared";
 
@@ -25,12 +25,12 @@ export function Decision({
     (selecting ? !own.committed : adding && game.activePlayerId === room.me);
   const cap =
     game.phase === "first_additions"
-      ? Math.min(3, game.deckCount)
+      ? Math.min(FIRST_ADDITION_MAX, game.deckCount)
       : Math.min(own?.cap ?? 0, game.deckCount);
   const message =
     room.members.find((m) => m.id === room.me)?.role === "spectator"
       ? room.mode === "friends"
-        ? "You’re watching the public table. Player seats open between rounds."
+        ? "You’re watching the public table. Player seats open in the lobby between matches."
         : "You’re watching a practice table. Player seats are reserved; unrevealed cards stay hidden."
       : selecting && own?.committed
         ? "Your choice is committed. Dealing begins when everyone is ready."
@@ -44,7 +44,7 @@ export function Decision({
                 ? "Cards arrive face down. Next: half your initial hand is revealed."
                 : game.phase.includes("reveal")
                   ? game.phase === "first_reveal"
-                    ? "Half your initial hand turns over. Next: add up to 3 or pass."
+                    ? "Half your initial hand turns over. Next: add up to 4 or pass."
                     : game.phase === "second_reveal"
                       ? "One card stays hidden. Next: your final addition, if eligible."
                       : "Every card turns over. Next: the closest total wins."
@@ -87,7 +87,7 @@ export function Decision({
         <p>
           {selecting
             ? `${config.initial[0]}–${config.initial[1]} cards, dealt face down. Confirming locks your choice.`
-            : `Add 0–${cap} cards. ${game.phase === "second_additions" ? `Cap: floor(${own.firstReceived} ÷ 2) = ${own.cap}. Then the final reveal.` : "Then reveal all but one. Your decision is final."}`}
+            : `Add 0–${cap} cards. ${game.phase === "second_additions" ? `Cap: floor(${own.firstReceived} ÷ 2) + 1 = ${own.cap}, limited by the shared deck. Then the final reveal.` : "Then reveal all but one. Your decision is final."}`}
         </p>
       </div>
       <div className="decision-controls">

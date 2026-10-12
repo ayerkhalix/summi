@@ -15,7 +15,8 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { audio, DEFAULT_AUDIO } from "@/audio/manager";
-import { BRAND } from "@/game/config";
+import { BRAND, DEFAULT_ROUND_LIMIT, ROUND_LIMITS, type RoundLimit } from "@/game/config";
+import { DEFAULT_PROFILE, type PlayerProfile } from "@/game/profile";
 import { request } from "@/lib/api";
 import { connectRoom } from "@/lib/room-connection";
 import type { RoomCommand, RoomView } from "@/server/types";
@@ -25,6 +26,7 @@ import { SceneCards, SceneDeck } from "./scene-cards";
 import { Landing } from "./landing";
 import { GameTable } from "./game-table";
 import { Avatar, History, type RoomProps } from "./table-shared";
+import { ProfilePicker } from "./player-profile";
 export function GameApp({ initialCode }: { initialCode?: string }) {
   const router = useRouter();
   const [room, setRoom] = useState<RoomView | null>(null),
@@ -222,6 +224,8 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
     inviteCode: string,
     role: "player" | "spectator",
     botCount = 2,
+    roundLimit: RoundLimit = DEFAULT_ROUND_LIMIT,
+    profile: PlayerProfile = DEFAULT_PROFILE,
   ) {
     if (busy) return;
     setBusy(true);
@@ -233,14 +237,17 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
               ...(entry === "bots" ? {} : { name }),
               mode: entry === "create" ? "friends" : entry,
               ...(entry === "bots" ? { botCount } : {}),
+              roundLimit,
+              profile,
             })
           : await request<RoomView>(
               `/api/rooms/${inviteCode.toUpperCase()}`,
               "POST",
-              { name, role },
+              { name, role, profile },
             );
       try {
         if (entry !== "bots") localStorage.setItem("summin-name", name);
+        localStorage.setItem("summin-profile", JSON.stringify(profile));
       } catch {}
       setRoom(next);
       setConnected(true);
@@ -512,13 +519,17 @@ function Entry({
     code: string,
     role: "player" | "spectator",
     botCount?: number,
+    roundLimit?: RoundLimit,
+    profile?: PlayerProfile,
   ) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(""),
     [code, setCode] = useState(initialCode || ""),
     [role, setRole] = useState<"player" | "spectator">("player"),
-    [botCount, setBotCount] = useState(2);
+    [botCount, setBotCount] = useState(2),
+    [roundLimit, setRoundLimit] = useState<RoundLimit>(DEFAULT_ROUND_LIMIT),
+    [profile, setProfile] = useState<PlayerProfile>(DEFAULT_PROFILE);
   return (
     <Modal
       title={
@@ -540,7 +551,7 @@ function Entry({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void submit(name, code, role, botCount);
+          void submit(name, code, role, botCount, roundLimit, profile);
         }}
       >
         {mode !== "bots" && (
@@ -620,6 +631,12 @@ function Entry({
             </fieldset>
           </>
         )}
+        <ProfilePicker value={profile} onChange={setProfile} />
+        {mode !== "join" && <label className="field-label" htmlFor="match-rounds">Match length
+          <select id="match-rounds" value={roundLimit} onChange={(event) => setRoundLimit(Number(event.target.value) as RoundLimit)}>
+            {ROUND_LIMITS.map((n) => <option key={n} value={n}>{n} rounds</option>)}
+          </select>
+        </label>}
         {error && (
           <p role="alert" className="field-error">
             {error}
@@ -683,9 +700,9 @@ function Lobby({
             </span>
           </div>
           <div className="player-list">
-            {players.map((m, i) => (
+            {players.map((m) => (
               <div className="lobby-player" key={m.id}>
-                <Avatar name={m.name} index={i} />
+                <Avatar name={m.name} profile={m.profile} />
                 <div>
                   <strong>
                     {m.name}
@@ -778,6 +795,13 @@ function Lobby({
               </button>
             )}
           </div>
+          <label className="field-label">Match length
+            <select aria-label="Match length" value={room.roundLimit} disabled={busy || !isHost}
+              onChange={(event) => void send({ type: "settings", roundLimit: Number(event.target.value) as RoundLimit })}>
+              {ROUND_LIMITS.map((n) => <option key={n} value={n}>{n} rounds</option>)}
+            </select>
+          </label>
+          <p className="fine-print">Rank-based points each round. Equal distance shares the win and points. The highest total after {room.roundLimit} rounds wins the match.</p>
           <p className="fine-print">
             {room.mode !== "friends"
               ? "Ready your seat to start another practice round. Bots stay ready automatically."

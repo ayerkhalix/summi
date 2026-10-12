@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "@/server/store";
 import { hashToken, RoomService } from "@/server/rooms";
-import { TIMING } from "@/game/config";
+import { FIRST_ADDITION_MAX, RULES, TIMING, type PlayerCount } from "@/game/config";
+import { assertInventory } from "@/game/engine";
 import type { RoomCommand } from "@/server/types";
 import { nameSchema, commandSchema } from "@/server/http";
 
@@ -110,7 +111,7 @@ describe("authoritative rooms", () => {
       "spectator",
     );
     await expect(command(r.code, s, { type: "claim" })).rejects.toThrow(
-      "between rounds",
+      "in the lobby",
     );
     await expect(
       command(r.code, s, {
@@ -281,8 +282,8 @@ describe("authoritative rooms", () => {
         await command(r.code, who, { type: "ready", ready: true });
       r = (await command(r.code, tokens[0], { type: "start" }))!;
       const ids = new Map(r.members.map((m, i) => [m.id, tokens[i]]));
-      const max = ({ 3: 10, 4: 7, 5: 5 } as Record<number, number>)[n];
-      for (let tries = 0; tries < 50 && r.status !== "results"; tries++) {
+      const max = RULES[n as PlayerCount].initial[1];
+      for (let tries = 0; tries < 100 && r.status !== "results"; tries++) {
         const g = r.game!;
         if (g.phase === "initial_selection")
           await Promise.all(
@@ -303,25 +304,27 @@ describe("authoritative rooms", () => {
             type: "game",
             action: {
               type: "add",
-              count: g.phase === "first_additions" ? 3 : 1,
+              count: Math.min(g.phase === "first_additions" ? FIRST_ADDITION_MAX : g.players.find((p) => p.id === g.activePlayerId)!.cap, g.deckCount),
               round: g.round,
               phase: g.phase,
             },
           });
         clock += 1300;
+        for (const who of tokens) await command(r.code, who, { type: "heartbeat" });
         r = await rooms.read(r.code, tokens[0]);
       }
       expect(r.status).toBe("results");
-      expect(r.game!.deckCount).toBe(52 - n * (max + 5));
+      expect(r.game!.deckCount).toBe(0);
       expect(
         r.game!.players.every(
-          (p) => p.hand.length === max + 4 && p.hand.every((c) => c.public),
+          (p) => p.hand.length >= max && p.hand.every((c) => c.public),
         ),
       ).toBe(true);
       const cards = r.game!.players.flatMap((p) =>
         p.hand.map((c) => c.card!.id),
       );
       expect(new Set(cards).size).toBe(cards.length);
+      assertInventory((await store.get(r.code))!.game!);
       expect(r.history).toHaveLength(1);
     },
   );

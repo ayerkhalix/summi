@@ -1,4 +1,31 @@
-# Validation — October 12, 2026
+# Validation — October 13, 2026
+
+Executed on Windows with Node.js 24.11.1 and npm 11.6.2.
+
+| Check | Result |
+| --- | --- |
+| `npm run lint` | Passed |
+| `npm run typecheck` | Passed |
+| `npm test` | 106 passed; 2 credentialed Supabase tests skipped in the default run |
+| Hosted Supabase integration | Both credentialed tests passed |
+| Chromium browser coverage | 26 distinct scenarios passed across the local run and production checks |
+| Production browser checks | 13 scenarios passed against `next start` using hosted Supabase |
+| `npm run build` | Passed, including TypeScript and static generation |
+| `npm run check:secrets` | Passed; 79 publishable files checked |
+
+Match tests complete every selectable match length (3, 5, 10, 12, 15, 20), check accumulated rank points after every round, reject starts past the final round, and verify a new match resets points and streaks while retaining room history. They cover host-only settings, readiness resets, fixed rosters, spectator permissions, reconnects during the results break, abandoned-match recovery, and recovery of the lobby when all player seats disappear. Existing room records are upgraded without SQL changes, including points and the old below-versus-above tie results.
+
+Scoring regressions explicitly tie totals 99 and 101 against a target of 100. Five-player tied distances independently verify ranks 1, 1, 3, 3, 5 and points 5, 5, 3, 3, 1. Shared wins extend streaks and losses reset them. Wider draw bounds are checked at every player count; maximum draws safely exhaust the shared deck without duplicating cards. The seeded engine coverage still exercises 128 complete rounds and verifies hidden identities, inventory and totals.
+
+Final-reveal checks verify one newly public card per transition, no result totals before scoring, and the complete 900ms flip plus three-second hold before results. A real three-round browser match completes both 30-second automatic breaks, accumulates points, stops after round three, and restores its final standings after a refresh. Separate browser fixtures verify that overall match points determine the champion even when someone else wins the final round, including shared match victory.
+
+The initial local browser run passed 19 scenarios. The production checks then passed all five remaining scenarios and rechecked the new full-match flow and all four bot counts with the widened limits. The remaining local failures were resolved by updating old hand-count and dialog test steps, waiting for room navigation before using its code, and replacing the entrance animation's synthetic resize event so it no longer dismisses hover previews. The tablet geometry check passed without development stylesheet reloads. The final build also passed the two championship fixtures and repeated twelve-room creation against the confirmed Supabase backend.
+
+Production coverage includes custom icons/colors and host settings across independent browsers, tablet board stability, desktop/phone card inspection, multiplayer privacy and spectators, an intentional disconnect and seat recovery, rematches, and complete rounds against one through four bots. Screenshots were visually reviewed for the final reveal, match standings and mobile lobby. Artifacts are ignored in `test-results/` and `.local/match-review/`. Test-owned database records from credentialed integration tests are removed afterward; normal browser rooms follow the existing 24-hour expiry policy.
+
+No database migration is required for this release. The checks above exercise the production build locally against hosted Supabase; they do not claim verification of the user's public Vercel deployment.
+
+## Previous validation — October 12, 2026
 
 Executed on Windows with Node.js 24.11.1 and npm 11.6.2.
 

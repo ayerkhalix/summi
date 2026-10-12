@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import type { CardView, GameView } from "@/game/types";
+import type { PlayerProfile } from "@/game/profile";
 import { MOTION } from "@/game/config";
 import { PlayingCard, rankLabel } from "./card";
 import { InspectableCard } from "./inspectable-card";
@@ -15,20 +16,20 @@ const describeCard = (held: CardView) =>
     : "Hidden card · unknown until its reveal";
 
 // Inspection only reads public faces. Selecting a card never changes the hand.
-export function OwnHand({ player, name, target, active }: {
-  player: Player; name: string; target: number; active: boolean;
+export function OwnHand({ player, name, target, active, profile, streak = 0, points = 0, finalSlotId }: {
+  player: Player; name: string; target: number; active: boolean; profile?: PlayerProfile; streak?: number; points?: number; finalSlotId?: string | null;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const hidden = player.hand.filter((card) => !card.public).length;
   const total = player.hand.reduce((sum, held) => sum + (held.public ? held.card?.value ?? 0 : 0), 0);
   const inspected = player.hand.find((card) => card.slotId === selected);
   return (
-    <section className={`own-hand ${active ? "your-turn" : ""}`} aria-label="Your hand">
+    <section className={`own-hand ${active ? "your-turn" : ""} ${streak >= 3 ? "on-streak" : ""}`} aria-label="Your hand">
       <div className="hand-heading">
         <div>
-          <Avatar name={name} />
+          <Avatar name={name} profile={profile} streak={streak} />
           <span>
-            <strong>{name} <small>YOU</small></strong>
+            <strong>{name} <small>YOU · {points} PTS</small>{streak >= 3 && <small className="streak-label"> · {streak} win streak</small>}</strong>
             <span className="muted">{player.hand.length} cards · {hidden} hidden</span>
           </span>
         </div>
@@ -46,7 +47,7 @@ export function OwnHand({ player, name, target, active }: {
             <button
               type="button"
               key={held.slotId}
-              className={`hand-card inspect-card ${selected === held.slotId ? "selected-card" : ""}`}
+              className={`hand-card inspect-card ${selected === held.slotId ? "selected-card" : ""} ${finalSlotId === held.slotId ? "final-card-highlight" : ""}`}
               aria-label={`Inspect card ${index + 1}: ${describeCard(held)}`}
               aria-pressed={selected === held.slotId}
               onClick={() => setSelected(selected === held.slotId ? null : held.slotId)}
@@ -73,22 +74,22 @@ export function OwnHand({ player, name, target, active }: {
   );
 }
 
-export function PlayerHand({ player, name, index, active, disconnected, phase }: {
-  player: Player; name: string; index: number; active: boolean; disconnected: boolean; phase: GameView["phase"];
+export function PlayerHand({ player, name, active, disconnected, phase, profile, streak = 0, points = 0, finalSlotId }: {
+  player: Player; name: string; active: boolean; disconnected: boolean; phase: GameView["phase"]; profile?: PlayerProfile; streak?: number; points?: number; finalSlotId?: string | null;
 }) {
   const total = player.hand.reduce((sum, held) => sum + (held.public ? held.card?.value ?? 0 : 0), 0);
   const hidden = player.hand.filter((held) => !held.public).length;
   const status = disconnected ? "Disconnected" : active ? "Taking their turn" : phase === "initial_selection" ? player.committed ? "Choice committed" : "Choosing a hand" : `${player.hand.length} cards · ${hidden} hidden`;
   return (
-    <article className={`opponent ${active ? "active-player" : ""}`} aria-label={`${name}'s public hand`}>
+    <article className={`opponent ${active ? "active-player" : ""} ${streak >= 3 ? "on-streak" : ""}`} aria-label={`${name}'s public hand`}>
       <div className="opponent-heading">
-        <Avatar name={name} index={index} />
-        <div><strong title={name}>{name}</strong><span>{status}</span></div>
+        <Avatar name={name} profile={profile} streak={streak} />
+        <div><strong title={name}>{name} <small>{points} PTS</small></strong><span>{streak >= 3 ? `${streak} win streak · ` : ""}{status}</span></div>
         <div className="public-total"><b>{player.hand.length ? total : "—"}</b><small>{phase === "round_results" ? "FINAL" : "REVEALED"}</small></div>
       </div>
       <div className="opponent-cards" tabIndex={0} aria-label={`${name}'s revealed cards`}>
         {player.hand.map((held, cardIndex) => (
-          <div key={held.slotId} className="hand-card">
+          <div key={held.slotId} className={`hand-card ${finalSlotId === held.slotId ? "final-card-highlight" : ""}`}>
             <InspectableCard card={held.card} isPublic={held.public} label={`${name}'s card ${cardIndex + 1}`} delay={held.dealOrder * MOTION.dealStagger} />
           </div>
         ))}

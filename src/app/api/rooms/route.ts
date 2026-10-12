@@ -7,6 +7,8 @@ import {
   limit,
   nameSchema,
   protectOrigin,
+  profileSchema,
+  roundLimitSchema,
   service,
   token,
 } from "@/server/http";
@@ -20,6 +22,8 @@ export async function POST(req: NextRequest) {
         name: nameSchema.optional(),
         mode: z.enum(["friends", "bots"]).optional(),
         botCount: z.number().int().min(1).max(4).optional(),
+        roundLimit: roundLimitSchema.optional(),
+        profile: profileSchema.optional(),
       })
       .strict()
       .refine(

@@ -57,9 +57,9 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
   const first = await phase(page, code, "initial_selection"),
     firstStarter = first.game!.order[0];
   await expect(
-    page.getByRole("button", { name: "Confirm 8 cards" }),
+    page.getByRole("button", { name: "Confirm 7 cards" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Confirm 8 cards" }).click();
+  await page.getByRole("button", { name: "Confirm 7 cards" }).click();
   await expect(
     page.getByText("Your choice is committed.", { exact: false }),
   ).toBeVisible();
@@ -67,6 +67,7 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
   expect(
     committed.game!.players.find((p) => p.id === first.me)!.initialCount,
   ).toBeNull();
+  await friend.getByRole("button", { name: "More initial cards" }).click();
   await friend.getByRole("button", { name: "More initial cards" }).click();
   await friend.getByRole("button", { name: "More initial cards" }).click();
   await friend.getByRole("button", { name: "Confirm 10 cards" }).click();
@@ -225,8 +226,8 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
   expect(next.game!.round).toBe(2);
   expect(next.game!.order[0]).not.toBe(firstStarter);
   expect(next.history).toHaveLength(1);
-  await page.getByRole("button", { name: "Confirm 8 cards" }).click();
-  await friend.getByRole("button", { name: "Confirm 8 cards" }).click();
+  await page.getByRole("button", { name: "Confirm 7 cards" }).click();
+  await friend.getByRole("button", { name: "Confirm 7 cards" }).click();
   await phase(page, code, "first_additions");
   for (let i = 0; i < 2; i++) {
     const current = await state(page, code),
@@ -240,10 +241,16 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
       )
       .toBe(i + 1);
   }
+  await phase(page, code, "second_additions");
+  for (let i = 0; i < 2; i++) {
+    const current = await state(page, code);
+    await seats.get(current.game!.activePlayerId!)!.getByRole("button", { name: "Confirm pass" }).click();
+    await expect.poll(async () => (await state(page, code)).game!.players.filter((p) => p.secondDone).length).toBe(i + 1);
+  }
   const nextResult = await phase(page, code, "round_results");
   expect(nextResult.history).toHaveLength(2);
   expect(nextResult.game!.events.filter((e) => e.kind === "skip")).toHaveLength(
-    2,
+    0,
   );
   await friend.getByRole("button", { name: "Review the revealed table" }).click();
   await friend.getByRole("button", { name: "Open settings" }).click();
@@ -272,6 +279,7 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  await page.getByRole("button", { name: "Return to lobby" }).click();
   await spectator.getByRole("button", { name: "Take an open seat" }).click();
   await expect
     .poll(async () => {
@@ -304,9 +312,7 @@ test("tutorial follows real rules and dialogs manage focus on mobile", async ({
   await page.getByRole("button", { name: "Pass", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(
-    page.getByText("Your cap is zero", { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "+1", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Ready to play" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);

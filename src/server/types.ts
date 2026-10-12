@@ -1,10 +1,13 @@
 import type { GameState, GameView, PlayerCommand, Result } from "@/game/types";
+import type { RoundLimit } from "@/game/config";
+import type { PlayerProfile } from "@/game/profile";
 export type GameMode = "friends" | "bots";
 export type Member = {
   isBot?: boolean;
   id: string;
   tokenHash: string;
   name: string;
+  profile?: PlayerProfile;
   role: "player" | "spectator";
   ready: boolean;
   joinedAt: number;
@@ -35,6 +38,18 @@ export type Room = {
   processed: string[];
   roundNumber: number;
   previousStarter: string | null;
+  roundLimit: RoundLimit;
+  matchStartRound: number;
+  matchNumber: number;
+};
+export type Standing = {
+  playerId: string;
+  name: string;
+  profile: PlayerProfile;
+  points: number;
+  wins: number;
+  streak: number;
+  rank: number;
 };
 export type RoomView = Omit<
   Room,
@@ -46,11 +61,13 @@ export type RoomView = Omit<
   me: string;
   paused: { playerId: string; name: string; deadline: number }[];
   backend: "local" | "supabase";
+  match: { round: number; roundLimit: RoundLimit; complete: boolean; standings: Standing[]; nextRoundAt: number | null };
 };
 export type RoomCommand =
   | { type: "ready"; ready: boolean }
   | { type: "start" | "lobby" | "leave" | "claim" | "heartbeat" }
-  | { type: "game"; action: PlayerCommand };
+  | { type: "game"; action: PlayerCommand }
+  | { type: "settings"; roundLimit: RoundLimit };
 export interface RoomStore {
   kind: "local" | "supabase";
   create(room: Room): Promise<boolean>;

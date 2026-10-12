@@ -74,10 +74,12 @@ export function SceneCards({
     const table = document.querySelector(".game-page, .lobby");
     if (table) observer.observe(table);
     window.addEventListener("resize", measure);
+    window.addEventListener("summin-table-settled", measure);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
       window.removeEventListener("resize", measure);
+      window.removeEventListener("summin-table-settled", measure);
     };
   }, [scene, landing]);
   return (

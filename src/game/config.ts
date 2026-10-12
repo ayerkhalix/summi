@@ -3,18 +3,25 @@ export const BRAND = {
   tagline: "Know the deck. Play the odds.",
 };
 export const RULES = {
-  2: { target: [80, 150], initial: [8, 15] },
-  3: { target: [55, 110], initial: [6, 10] },
-  4: { target: [40, 85], initial: [5, 7] },
-  5: { target: [30, 70], initial: [4, 5] },
+  2: { target: [80, 150], initial: [7, 16] },
+  3: { target: [55, 110], initial: [5, 11] },
+  4: { target: [40, 85], initial: [4, 8] },
+  5: { target: [30, 70], initial: [3, 6] },
 } as const;
 export type PlayerCount = keyof typeof RULES;
 export const rulesFor = (count: number) => RULES[count as PlayerCount];
-export const FIRST_ADDITION_MAX = 3;
-export const secondCap = (received: number) => Math.floor(received / 2);
+export const FIRST_ADDITION_MAX = 4;
+export const secondCap = (received: number) => Math.floor(received / 2) + 1;
+export const ROUND_LIMITS = [3, 5, 10, 12, 15, 20] as const;
+export type RoundLimit = (typeof ROUND_LIMITS)[number];
+export const DEFAULT_ROUND_LIMIT: RoundLimit = 5;
 export const SUITS = ["hearts", "diamonds", "clubs", "spades"] as const;
 export const TIMING = {
   automaticPhase: 1200,
+  finalCard: 1600,
+  // The last flip finishes before the three-second results pause begins.
+  finalHold: 3900,
+  nextRound: 30000,
   heartbeat: 5000,
   stale: 20000,
   reconnect: 90000,

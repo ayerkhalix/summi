@@ -3,11 +3,17 @@ import { isIP } from "node:net";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { RuleError } from "@/game/engine";
-import { PHASES } from "@/game/config";
+import { PHASES, ROUND_LIMITS } from "@/game/config";
+import { PLAYER_ICONS } from "@/game/profile";
 import { ApiError } from "./errors";
 import { hashToken, RoomService } from "./rooms";
 import { getStore } from "./store";
 export const COOKIE = "summin_guest";
+export const roundLimitSchema = z.union(ROUND_LIMITS.map((n) => z.literal(n)));
+export const profileSchema = z.object({
+  icon: z.enum(PLAYER_ICONS),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Choose a valid icon color."),
+}).strict();
 export const codeSchema = z
   .string()
   .trim()
@@ -29,7 +35,7 @@ export const nameSchema = z
 const actionSchema = z
   .object({
     type: z.enum(["select", "add"]),
-    count: z.number().int().min(0).max(15),
+    count: z.number().int().min(0).max(16),
     round: z.number().int().positive(),
     phase: z.enum(PHASES),
   })
@@ -40,6 +46,7 @@ export const commandSchema = z
     expectedRound: z.number().int().nonnegative().optional(),
     command: z.discriminatedUnion("type", [
       z.object({ type: z.literal("ready"), ready: z.boolean() }).strict(),
+      z.object({ type: z.literal("settings"), roundLimit: roundLimitSchema }).strict(),
       z
         .object({
           type: z.enum(["start", "lobby", "leave", "claim", "heartbeat"]),

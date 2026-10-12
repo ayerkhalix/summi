@@ -9,6 +9,7 @@ import {
   limit,
   nameSchema,
   protectOrigin,
+  profileSchema,
   service,
   token,
 } from "@/server/http";
@@ -34,13 +35,13 @@ export async function POST(req: NextRequest, context: Context) {
     protectOrigin(req);
     const code = codeSchema.parse((await context.params).code);
     const input = z
-      .object({ name: nameSchema, role: z.enum(["player", "spectator"]) })
+      .object({ name: nameSchema, role: z.enum(["player", "spectator"]), profile: profileSchema.optional() })
       .strict()
       .parse(await body(req));
     const guest = token(req, true);
     await limit(req, guest, "join");
     return json(
-      await service().join(code, input.name, input.role, hashToken(guest)),
+      await service().join(code, input.name, input.role, hashToken(guest), input.profile),
       guest,
     );
   } catch (e) {

@@ -9,6 +9,8 @@ import { PhaseProgress } from "./phase-progress";
 import { RoundResults } from "./round-results";
 import { SceneDeck } from "./scene-cards";
 import { History, type RoomProps } from "./table-shared";
+import { FinalReveal } from "./final-reveal";
+import { MatchScoreboard } from "./match-scoreboard";
 
 export function GameTable({ room, busy, send, rules }: RoomProps & { rules: () => void }) {
   const game = room.game!;
@@ -20,16 +22,19 @@ export function GameTable({ room, busy, send, rules }: RoomProps & { rules: () =
   const finished = game.phase === "round_results";
   const paused = room.paused.length > 0;
   const activeName = game.activePlayerId ? name(game.activePlayerId) : null;
+  const standing = (id: string) => room.match.standings.find((row) => row.playerId === id);
+  const finalSlotId = game.phase === "final_reveal" ? game.finalReveal?.lastSlotId : null;
   return (
-    <motion.main className="game-page" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} onAnimationComplete={() => window.dispatchEvent(new Event("resize"))}>
+    <motion.main className="game-page" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} onAnimationComplete={() => window.dispatchEvent(new Event("summin-table-settled"))}>
       <div className="game-heading">
         <div className="phase-heading">
-          <span className="eyebrow">ROUND {String(game.round).padStart(2, "0")} · {game.players.length} PLAYERS{room.mode === "bots" && " · BOTS"}{me.role === "spectator" && " · SPECTATING"}</span>
+          <span className="eyebrow">ROUND {String(room.match.round).padStart(2, "0")} / {room.roundLimit} · {game.players.length} PLAYERS{room.mode === "bots" && " · BOTS"}{me.role === "spectator" && " · SPECTATING"}</span>
           <h1 key={game.phase}>{ended ? "Round ended" : PHASE_LABELS[game.phase]}</h1>
         </div>
         <PhaseProgress phase={game.phase} />
         <button className="text-button" aria-label="The rules" onClick={rules}><Icon name="help" size={16} /> The rules</button>
       </div>
+      <MatchScoreboard room={room} compact />
       {(paused || ended) && (
         <div className={`pause-banner ${ended ? "ended" : ""}`} role="status">
           <Icon name="wifi" />
@@ -65,16 +70,16 @@ export function GameTable({ room, busy, send, rules }: RoomProps & { rules: () =
             </div>
           </section>
           <section className="opponents" aria-label="Other players" style={{ gridTemplateColumns: `repeat(${opponents.length}, minmax(0, 1fr))` }}>
-            {opponents.map((player, index) => (
-              <PlayerHand key={player.id} player={player} name={name(player.id)} index={index + 1} active={game.activePlayerId === player.id} disconnected={room.members.find((member) => member.id === player.id)?.disconnectedAt !== null} phase={game.phase} />
+            {opponents.map((player) => (
+              <PlayerHand key={player.id} player={player} name={name(player.id)} profile={room.members.find((m) => m.id === player.id)?.profile} streak={standing(player.id)?.streak} points={standing(player.id)?.points} finalSlotId={finalSlotId} active={game.activePlayerId === player.id} disconnected={room.members.find((member) => member.id === player.id)?.disconnectedAt !== null} phase={game.phase} />
             ))}
           </section>
           <div className={`table-stage ${own ? "" : "spectator-stage"}`}>
-            {own && <OwnHand key={game.round} player={own} name={me.name} target={game.target} active={game.activePlayerId === room.me} />}
+            {own && <OwnHand key={game.round} player={own} name={me.name} profile={me.profile} streak={standing(me.id)?.streak} points={standing(me.id)?.points} finalSlotId={finalSlotId} target={game.target} active={game.activePlayerId === room.me} />}
             <div className="turn-area">
               {finished ? <RoundResults key={game.round} room={room} busy={busy} send={send} /> : ended ? (
                 <div className="decision-panel waiting"><Icon name="shuffle" /><p>This round has ended. Return to the lobby for a fresh deck.</p></div>
-              ) : <Decision key={`${game.round}:${game.phase}:${game.activePlayerId}`} room={room} busy={busy || paused} send={send} activeName={activeName} />}
+              ) : game.phase === "final_reveal" ? <FinalReveal room={room} /> : <Decision key={`${game.round}:${game.phase}:${game.activePlayerId}`} room={room} busy={busy || paused} send={send} activeName={activeName} />}
             </div>
           </div>
         </div>
@@ -89,7 +94,7 @@ export function GameTable({ room, busy, send, rules }: RoomProps & { rules: () =
           </ol>
         </details>
         <details><summary>Past rounds <span>{room.history.length}</span></summary>{room.history.length ? <History room={room} /> : <p className="muted">Your completed rounds will appear here.</p>}</details>
-        <span className="table-note">Above or below, closest wins. Ties favor below.</span>
+        <span className="table-note">Above or below, closest wins. Equal distance shares the win.</span>
       </div>
     </motion.main>
   );

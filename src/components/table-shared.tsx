@@ -6,13 +6,7 @@ export type RoomProps = {
   send: (command: RoomCommand) => Promise<void>;
 };
 
-export function Avatar({ name, index = 0 }: { name: string; index?: number }) {
-  return (
-    <span className={`avatar avatar-${index % 5}`}>
-      {name.slice(0, 2).toUpperCase()}
-    </span>
-  );
-}
+export { Avatar } from "./player-profile";
 
 export function History({ room }: { room: RoomView }) {
   if (!room.history.length) return null;

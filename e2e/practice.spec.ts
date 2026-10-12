@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { RoomView } from "../src/server/types";
-import { rulesFor } from "../src/game/config";
+import { FIRST_ADDITION_MAX, rulesFor } from "../src/game/config";
 
 for (const botCount of [1, 2, 3, 4])
   test(`complete ${botCount}-bot match with continuous cards and centered controls`, async ({
@@ -67,7 +67,8 @@ for (const botCount of [1, 2, 3, 4])
     await expect(page.getByRole("button", { name: "More initial cards" })).toBeDisabled();
     await page.getByRole("button", { name: `Confirm ${max} cards`, exact: true }).click();
     let completed: RoomView | undefined;
-    for (let step = 0; step < 120; step++) {
+    // Up to twenty final cards now reveal individually before the results hold.
+    for (let step = 0; step < 200; step++) {
       const response = await page.request.get(`/api/rooms/${code}`);
       expect(response.ok()).toBeTruthy();
       const room: RoomView = await response.json();
@@ -83,8 +84,9 @@ for (const botCount of [1, 2, 3, 4])
         await expect(
           page.getByRole("region", { name: "Your decision", exact: true }),
         ).toBeVisible();
-        const n = room.game!.phase === "first_additions" ? 3 : 1;
-        await page.getByRole("button", { name: `+${n}`, exact: true }).click();
+        const own = room.game!.players.find((p) => p.id === room.me)!;
+        const n = Math.min(room.game!.phase === "first_additions" ? FIRST_ADDITION_MAX : own.cap, room.game!.deckCount);
+        if (n) await page.getByRole("button", { name: `+${n}`, exact: true }).click();
         if (botCount === 4 && room.game!.phase === "first_additions") {
           await page.screenshot({
             path: "test-results/bots-desktop.png",
@@ -103,7 +105,7 @@ for (const botCount of [1, 2, 3, 4])
         }
         await page
           .getByRole("button", {
-            name: `Add ${n} ${n === 1 ? "card" : "cards"}`,
+            name: n ? `Add ${n} ${n === 1 ? "card" : "cards"}` : "Confirm pass",
             exact: true,
           })
           .click();

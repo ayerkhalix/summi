@@ -11,7 +11,7 @@ async function waitForPhase(page: Page, code: string, phase: string, turn = fals
   await expect.poll(async () => {
     const room = await state(page, code);
     return room.game!.phase === phase && (!turn || room.game!.activePlayerId === room.me);
-  }).toBe(true);
+  }, { timeout: 45000 }).toBe(true);
   return state(page, code);
 }
 
@@ -101,7 +101,7 @@ for (const viewport of [
 
     // Submit through the UI so its acknowledged deal is rendered immediately;
     // the periodic stream may next arrive after the brief dealing phase.
-    for (let count = 8; count < 15; count++)
+    for (let count = 7; count < 15; count++)
       await page.getByRole("button", { name: "More initial cards" }).click();
     const selectionResponse = page.waitForResponse((response) =>
       response.url().endsWith(`/api/rooms/${code}`) &&

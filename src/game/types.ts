@@ -35,6 +35,8 @@ export type Result = {
   distance: number;
   side: "below" | "exact" | "above";
   winner: boolean;
+  rank: number;
+  points: number;
 };
 export type GameState = {
   round: number;
@@ -49,6 +51,7 @@ export type GameState = {
   events: GameEvent[];
   results: Result[];
   tiebreakApplied: boolean;
+  finalReveal: { total: number; revealed: number; lastSlotId: string | null } | null;
 };
 export type PlayerCommand = {
   type: "select" | "add";

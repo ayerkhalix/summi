@@ -8,7 +8,7 @@ import {
   score,
 } from "@/game/engine";
 import { createDeck, shuffle } from "@/game/deck";
-import { RULES, secondCap, type PlayerCount } from "@/game/config";
+import { FIRST_ADDITION_MAX, RULES, secondCap, type PlayerCount } from "@/game/config";
 import { firstWindow, seeded, selected, toFirst } from "./fixtures";
 
 describe("official deck and setup", () => {
@@ -112,7 +112,7 @@ describe("reveals and addition windows", () => {
     ).toEqual([4, 7]);
     assertInventory(s);
   });
-  it.each([-1, 4, 1.5])(
+  it.each([-1, 5, 1.5])(
     "rejects illegal first addition %s without mutating input",
     (count) => {
       const { state, rng } = toFirst();
@@ -128,7 +128,7 @@ describe("reveals and addition windows", () => {
       expect(state).toEqual(before);
     },
   );
-  it.each([0, 1, 2, 3])(
+  it.each([0, 1, 2, 3, 4])(
     "accepts first addition %i; second cap uses actual receipt",
     (count) => {
       const { state, rng } = toFirst();
@@ -139,7 +139,7 @@ describe("reveals and addition windows", () => {
         rng,
       );
       expect(s.players[0].firstReceived).toBe(count);
-      expect(secondCap(s.players[0].firstReceived)).toBe([0, 0, 1, 1][count]);
+      expect(secondCap(s.players[0].firstReceived)).toBe([1, 1, 2, 2, 3][count]);
       expect(s.deck.length).toBe(state.deck.length - count);
       expect(s.players[0].hand.slice(8).every((c) => !c.revealed)).toBe(true);
     },
@@ -183,22 +183,37 @@ describe("reveals and addition windows", () => {
       "Revealed 9 cards.",
     ]);
   });
-  it("automatically skips zero caps, preserves others' caps, rejects excessive second additions", () => {
+  it("allows a final card after passing earlier, and rejects excessive second additions", () => {
     const { state, rng } = toFirst(3);
     let s = advance(firstWindow(state, [0, 2, 3], rng), rng);
-    expect(s.players[0].secondDone).toBe(true);
-    expect(projectGame(s).activePlayerId).toBe("p1");
+    expect(s.players[0].secondDone).toBe(false);
+    expect(projectGame(s).activePlayerId).toBe("p0");
+    s = act(s, "p0", { type: "add", count: 1, round: 1, phase: s.phase }, rng);
     expect(() =>
-      act(s, "p1", { type: "add", count: 2, round: 1, phase: s.phase }, rng),
+      act(s, "p1", { type: "add", count: 3, round: 1, phase: s.phase }, rng),
     ).toThrow();
     s = act(s, "p1", { type: "add", count: 1, round: 1, phase: s.phase }, rng);
-    expect(secondCap(s.players[2].firstReceived)).toBe(1);
+    expect(secondCap(s.players[2].firstReceived)).toBe(2);
   });
   it("final reveal exposes every card and counts each once, with no further actions", () => {
     const { state, rng } = toFirst();
     let s = advance(firstWindow(state, [2, 3], rng), rng);
     s = firstWindow(s, [1, 0], rng);
     expect(s.phase).toBe("final_reveal");
+    expect(s.results).toEqual([]);
+    expect(s.finalReveal?.total).toBe(3);
+    for (let n = 1; n <= 3; n++) {
+      const before = s.players.flatMap((p) => p.hand).filter((c) => c.revealed).length;
+      s = advance(s, rng);
+      expect(s.players.flatMap((p) => p.hand).filter((c) => c.revealed)).toHaveLength(before + 1);
+      expect(s.phase).toBe("final_reveal");
+      expect(s.results).toEqual([]);
+      const view = projectGame(s), json = JSON.stringify(view);
+      for (const held of s.players.flatMap((p) => p.hand).filter((c) => !c.revealed))
+        expect(json).not.toContain(JSON.stringify(held.card.id));
+      expect(s.finalReveal?.revealed).toBe(n);
+    }
+    s = advance(s, rng);
     for (const p of s.players) {
       expect(p.hand.every((c) => c.revealed)).toBe(true);
       expect(s.results.find((r) => r.playerId === p.id)?.total).toBe(
@@ -206,20 +221,27 @@ describe("reveals and addition windows", () => {
       );
     }
     assertInventory(s);
-    s = advance(s, rng);
     expect(s.phase).toBe("round_results");
     expect(() =>
       act(s, "p0", { type: "add", count: 1, phase: s.phase, round: 1 }, rng),
     ).toThrow();
   });
   it.each([2, 3, 4, 5] as PlayerCount[])(
-    "cannot exhaust the deck even with official maximums (%i players)",
+    "safely stops at the end of the shared deck with widened maximums (%i players)",
     (n) => {
       const { state, rng } = toFirst(n, Array(n).fill(RULES[n].initial[1]));
-      let s = advance(firstWindow(state, Array(n).fill(3), rng), rng);
-      s = firstWindow(s, Array(n).fill(1), rng);
-      expect(s.deck.length).toBe(52 - n * (RULES[n].initial[1] + 5));
-      expect(s.deck.length).toBeGreaterThanOrEqual(2);
+      let s = state;
+      for (let step = 0; s.phase !== "round_results" && step < 100; step++) {
+        const view = projectGame(s);
+        if (view.activePlayerId) {
+          const player = view.players.find((p) => p.id === view.activePlayerId)!;
+          const cap = Math.min(s.phase === "first_additions" ? FIRST_ADDITION_MAX : player.cap, s.deck.length);
+          s = act(s, player.id, { type: "add", count: cap, phase: s.phase, round: 1 }, rng);
+        } else s = advance(s, rng);
+        assertInventory(s);
+      }
+      expect(s.phase).toBe("round_results");
+      expect(s.deck.length).toBe(n === 2 ? 4 : 0);
       assertInventory(s);
     },
   );
@@ -242,8 +264,9 @@ describe("scoring and private projections", () => {
       .map((r) => r.playerId);
   it("exact match beats all other totals", () =>
     expect(winners([99, 100, 101])).toEqual(["1"]));
-  it("equidistant below beats above with explicit tiebreak", () => {
-    expect(winners([98, 102])).toEqual(["0"]);
+  it("equidistant below and above share the win, including -1 and +1", () => {
+    expect(winners([99, 101])).toEqual(["0", "1"]);
+    expect(winners([98, 102])).toEqual(["0", "1"]);
     expect(
       score(
         [
@@ -252,7 +275,12 @@ describe("scoring and private projections", () => {
         ],
         100,
       ).tiebreakApplied,
-    ).toBe(true);
+    ).toBe(false);
+  });
+  it("awards rank-based points with equal distances sharing a rank and points", () => {
+    const results = score([99, 101, 103, 103, 110].map((total, i) => ({ playerId: String(i), total })), 100).results;
+    expect(results.map((r) => r.rank)).toEqual([1, 1, 3, 3, 5]);
+    expect(results.map((r) => r.points)).toEqual([5, 5, 3, 3, 1]);
   });
   it("same-side ties share wins, including multiple exacts", () => {
     expect(winners([98, 98, 105])).toEqual(["0", "1"]);
@@ -281,7 +309,7 @@ describe("complete rounds across different draws", () => {
       const rng = seeded(seed);
       let state = makeRound(Array.from({ length: count }, (_, i) => `p${i}`), seed, seed % count, rng);
       const revealed = new Set<string>();
-      for (let step = 0; state.phase !== "round_results" && step < 40; step++) {
+      for (let step = 0; state.phase !== "round_results" && step < 100; step++) {
         const view = projectGame(state);
         const serialized = JSON.stringify(view);
         for (const player of state.players)
@@ -296,7 +324,7 @@ describe("complete rounds across different draws", () => {
           state = act(state, player.id, { type: "select", count: min + rng(max - min + 1), phase: state.phase, round: seed }, rng);
         } else if (view.activePlayerId) {
           const player = view.players.find((p) => p.id === view.activePlayerId)!;
-          const cap = state.phase === "first_additions" ? 3 : player.cap;
+          const cap = Math.min(state.phase === "first_additions" ? FIRST_ADDITION_MAX : player.cap, state.deck.length);
           state = act(state, player.id, { type: "add", count: rng(cap + 1), phase: state.phase, round: seed }, rng);
         } else state = advance(state, rng);
         assertInventory(state);
