@@ -9,9 +9,7 @@ export const RULES = {
   5: { target: [30, 70], initial: [4, 5] },
 } as const;
 export type PlayerCount = keyof typeof RULES;
-// Solo is a separate practice mode using the two-player target/hand ranges.
-export const rulesFor = (count: number) =>
-  RULES[(count === 1 ? 2 : count) as PlayerCount];
+export const rulesFor = (count: number) => RULES[count as PlayerCount];
 export const FIRST_ADDITION_MAX = 3;
 export const secondCap = (received: number) => Math.floor(received / 2);
 export const SUITS = ["hearts", "diamonds", "clubs", "spades"] as const;

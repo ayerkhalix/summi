@@ -1,37 +1,28 @@
 import { expect, test } from "@playwright/test";
 import type { RoomView } from "../src/server/types";
+import { rulesFor } from "../src/game/config";
 
-for (const botCount of [0, 1, 4])
-  test(`complete ${botCount ? `${botCount}-bot match` : "solo challenge"} with continuous cards and centered controls`, async ({
+for (const botCount of [1, 2, 3, 4])
+  test(`complete ${botCount}-bot match with continuous cards and centered controls`, async ({
     page,
   }) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/");
-    await expect(page.locator(".scene-card")).toHaveCount(3);
+    await expect(page.locator(".scene-card")).toHaveCount(6);
     const physicalCard = await page
       .locator(".scene-card")
       .first()
       .elementHandle();
-    if (botCount)
-      await page
-        .getByRole("button", { name: "Play with bots", exact: true })
-        .click();
-    else
-      await page
-        .getByRole("button", { name: "Solo challenge", exact: true })
-        .click();
-    await page.getByLabel("Your display name").fill("Practice Player");
-    if (botCount)
-      await page
-        .getByRole("button", {
-          name: `${botCount} ${botCount === 1 ? "bot" : "bots"}`,
-          exact: true,
-        })
-        .click();
+    await expect(page.getByRole("button", { name: "Solo challenge", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Play with bots", exact: true }).click();
+    await expect(page.getByLabel("Your display name")).toHaveCount(0);
+    await page.getByRole("button", {
+      name: `${botCount} ${botCount === 1 ? "bot" : "bots"}`, exact: true,
+    }).click();
     await page
       .getByRole("button", {
-        name: botCount ? "Start bot match" : "Start solo challenge",
+        name: "Start bot match",
         exact: true,
       })
       .click();
@@ -68,12 +59,22 @@ for (const botCount of [0, 1, 4])
     expect(geometry.deckX).toBeLessThan(8);
     expect(geometry.deckY).toBeLessThan(8);
     expect(geometry.center).toBeLessThan(3);
-    await page.getByRole("button", { name: /^Confirm \d+ cards$/ }).click();
+    const [min, max] = rulesFor(botCount + 1).initial;
+    await expect(page.getByRole("button", { name: "Fewer initial cards" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: `Confirm ${min} cards`, exact: true })).toBeVisible();
+    for (let count = min; count < max; count++)
+      await page.getByRole("button", { name: "More initial cards" }).click();
+    await expect(page.getByRole("button", { name: "More initial cards" })).toBeDisabled();
+    await page.getByRole("button", { name: `Confirm ${max} cards`, exact: true }).click();
     let completed: RoomView | undefined;
     for (let step = 0; step < 120; step++) {
       const response = await page.request.get(`/api/rooms/${code}`);
       expect(response.ok()).toBeTruthy();
       const room: RoomView = await response.json();
+      for (const player of room.game!.players)
+        expect(
+          player.hand.filter((c) => !c.public).every((c) => c.card === null),
+        ).toBe(true);
       if (room.status === "results") {
         completed = room;
         break;
@@ -106,6 +107,11 @@ for (const botCount of [0, 1, 4])
             exact: true,
           })
           .click();
+        await expect.poll(async () => {
+          const latest: RoomView = await (await page.request.get(`/api/rooms/${code}`)).json();
+          const own = latest.game!.players.find((player) => player.id === latest.me)!;
+          return room.game!.phase === "first_additions" ? own.firstDone : own.secondDone;
+        }).toBe(true);
       }
       await page.waitForTimeout(300);
     }
@@ -113,25 +119,7 @@ for (const botCount of [0, 1, 4])
     await expect(
       page.getByRole("region", { name: "Round results", exact: true }),
     ).toBeVisible();
-    if (!botCount)
-      await expect(
-        page.getByText(/Best distance at this table:/),
-      ).toBeVisible();
-    if (!botCount) {
-      await page
-        .getByRole("button", { name: "Return to lobby", exact: true })
-        .click();
-      await expect(
-        page.getByText("Waiting for a friend…", { exact: true }),
-      ).toHaveCount(0);
-      await page
-        .getByRole("button", { name: "I’m ready", exact: true })
-        .click();
-      await page
-        .getByRole("button", { name: "Start the round", exact: true })
-        .click();
-    } else
-      await page.getByRole("button", { name: "Play the next round" }).click();
+    await page.getByRole("button", { name: "Play the next round" }).click();
     await expect
       .poll(
         async () =>

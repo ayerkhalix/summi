@@ -55,7 +55,7 @@ export async function PATCH(req: NextRequest, context: Context) {
       await body(req),
     );
     const guest = token(req);
-    await limit(req, guest, "command");
+    await limit(req, guest, command.type === "heartbeat" ? "heartbeat" : "command");
     return json(
       await service().command(
         code,

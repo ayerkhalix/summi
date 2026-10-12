@@ -1,8 +1,8 @@
 # SUMMIN
 
-A browser card game for solo challenges, computer opponents, or 2–5 friends. One shared 52-card deck, a public target, private hands, staged reveals, and two chances to add cards. Closest wins, on either side of the target.
+A browser card game against computer opponents or with 2–5 friends. One shared 52-card deck, a public target, face-down hands, staged reveals, and two chances to add cards. Closest wins, on either side of the target.
 
-This repository contains the playable application, a standalone rules engine, a real local multiplayer server, a Supabase production storage adapter, SQL migrations, synthesized audio, and automated tests. **No Supabase project or hosted deployment is configured in this checkout.**
+This repository contains the playable application, a standalone rules engine, a real local multiplayer server, a Supabase production storage adapter, SQL migrations, synthesized audio, and automated tests. Configure your own server-only environment variables; credentials are never included in this repository.
 
 ## Run a local match
 
@@ -23,15 +23,18 @@ For friends on the same LAN, the dev server listens on `0.0.0.0`. Use the comput
 
 The landing page and explicitly labeled local tutorial work without any backend configuration. In production mode, room creation/joining/actions require configured Supabase credentials. A missing backend produces a clear error; it never creates pretend online rooms.
 
-## Solo, bots, and the table scene
+## Bots and the table scene
 
-Choose **Solo challenge** or **Play with bots** on the landing page, enter a display name, and start immediately. There is no account signup. Both modes work with the default local server, without Supabase credentials, a second browser, or other players. All three game modes use the authoritative server and its storage; production solo and bot tables also require the configured Supabase backend. These modes require a running server and are not offline browser simulations.
+Choose **Play with bots** on the landing page and start without entering a name. There is no account signup. Bot matches work with the default local server, without Supabase credentials, a second browser, or other players. Friends and bot matches use the authoritative server and its storage; production bot tables also require the configured Supabase backend. These modes require a running server and are not offline browser simulations.
 
-- **Solo challenge:** one player, one burn, targets 80–150, and initial hands of 8–15. This separate practice variant uses the two-player target/hand ranges and the same card values, reveal sequence, addition caps, and 52-card inventory. Results record absolute distance and the best distance in the table's completed history. Official multiplayer remains limited to 2–5 players.
-- **Bot match:** choose 1–4 named computer opponents, giving 2–5 total players. All official multiplayer ranges and rules apply. Bots commit concealed initial counts and take additions automatically, with a short presentation delay. Their policy receives only `projectGame(game, botId)`: its own hand, public cards, burns, and counts. It estimates unseen rank probabilities and minimizes expected absolute distance; it cannot inspect deck order or opponents' hidden identities. Bots are labeled, never receive host privileges, and never substitute for a disconnected human. The usual pause and 90-second clean termination still apply.
+- **Bot match:** choose 1–4 named computer opponents, giving 2–5 total players. All official multiplayer ranges and rules apply. Bots commit concealed initial counts and take additions automatically, with a short presentation delay. Their policy receives only `projectGame(game)`: revealed cards, burns, and counts. It estimates unseen rank probabilities, including its own face-down cards, and minimizes expected absolute distance; it cannot inspect deck order or any hidden identities. Bots are labeled, never receive host privileges, and never substitute for a disconnected human. The usual pause and 90-second clean termination still apply.
 - Practice player seats are reserved for the original human and configured bots. Other guests may spectate, including during play, with the same privacy filtering as multiplayer; they cannot claim a practice seat. Completed history is retained for rematches and lobby returns.
 
-The landing page centers its controls among three persistent 3D cards. Entering a room flips and gathers those same card elements into the shared deck; the lobby deck moves to the table when the host starts. Native history updates preserve the mounted scene and room URLs still restore on refresh. Hands surround the centered target and decision controls on desktop; narrow screens stack the table into centered sections. Card deals, flips, table entrance, and hover lift use perspective transforms. System and saved reduced-motion preferences disable scene travel and idle movement.
+The visual identity uses centralized CSS tokens in `src/app/globals.css`: obsidian and charcoal surfaces, crimson actions, royal plum secondary accents, muted rose emphasis, and ivory text. Small accent text uses lighter rose/plum inks for contrast. Standard red and black suit inks remain independent of the application palette.
+
+The landing page centers its controls among six persistent 3D cards. Each floats on a different CSS timeline and flips between ivory standard card faces and deep plum backs; faces change only while the back covers them. Animation pauses offscreen or in a hidden tab, and system or saved reduced-motion preferences stop continuous motion. Entering a room gathers those same card elements into the shared deck; native history updates preserve the mounted scene and room URLs still restore on refresh.
+
+The compact table puts the target, remaining deck, and burns in one status strip, followed by compact opponent hands. The main hand uses 5:7 cards, 104–112px wide on larger desktops and 88px on phones. A desktop fan preserves readable indices for large hands; mobile hands scroll horizontally. Selecting a card lifts it and describes only its revealed information; inspection never makes a game decision. The current phase, progress, and valid controls stay contextual. Reserved hand/action space keeps phase changes steady without a tall fixed board ratio. Round activity and history are expandable, and results open in a dismissible keyboard-accessible dialog so the board does not grow.
 
 ## Stack and commands
 
@@ -59,7 +62,7 @@ npm run test:e2e
 
 On Linux CI, use `npx playwright install --with-deps chromium`. Browser tests use isolated guests, fixed decision sequences, and independent checks of authoritative totals and privacy. They never expose an endpoint for setting production decks, targets, winners, or clocks. Unit tests inject seeded random sources; real room shuffles, target generation, and reveal choices use Node’s cryptographic `randomInt`.
 
-If a dev server is already running in this checkout, reuse it instead of starting a second Next instance. In PowerShell: `$env:PLAYWRIGHT_BASE_URL='http://localhost:3000'; npm run test:e2e`. The running server must use the local backend. Browser tests include complete solo and bot matches, refresh/rematch recovery, persistent scene-card elements, centered decisions, mobile overflow, and real 127.0.0.1 guest entry alongside multiplayer and tutorial coverage.
+If a dev server is already running in this checkout, reuse it instead of starting a second Next instance. In PowerShell: `$env:PLAYWRIGHT_BASE_URL='http://localhost:3000'; npm run test:e2e`. The running server must use the local backend. Browser tests include complete bot matches, staged reveals, refresh/rematch recovery, persistent scene-card elements, centered decisions, stable board geometry and scroll position, mobile overflow, and real 127.0.0.1 guest entry alongside multiplayer and tutorial coverage.
 
 ## Official rules and implemented decisions
 
@@ -74,7 +77,7 @@ Ace = 1; Jack = 11, Queen = 12, King = 13. Targets are independently uniform int
 
 Players commit their initial counts simultaneously after the burns. Counts remain concealed until all players commit, including in the owner’s server projection; the UI retains the confirmed count only through its decision state. The server deals one card per player repeatedly in rotating order, skipping players who already have their selected number.
 
-The first reveal exposes `floor(initial count / 2)` random cards. The first addition allows 0–3 cards, in turn order; passing is final for this window. The second reveal includes additions and leaves exactly one hidden card where possible. The second addition cap is `floor(actual first additions / 2)`, giving 0, 0, 1, 1. Zero caps skip automatically with an explanation. Final additions remain hidden until the final reveal.
+All hands start face down. Unrevealed cards are hidden from everyone, including their owner and bots; server responses contain no hidden card identities. The hand display shows the revealed subtotal until every card is face up. The first reveal exposes `floor(initial count / 2)` random cards. The first addition allows 0–3 cards, in turn order; passing is final for this window. The second reveal includes additions and leaves exactly one hidden card where possible. The second addition cap is `floor(actual first additions / 2)`, giving 0, 0, 1, 1. Zero caps skip automatically with an explanation. Final additions remain hidden until the final reveal.
 
 Final scoring uses absolute distance from the target. At equal distance, below beats above. Remaining same-side ties share victory, including multiple exact matches. Overshooting does not automatically lose. The results show complete hands, totals, distance, side, winners, the applicable tiebreak, and remaining deck count.
 
@@ -82,15 +85,18 @@ There are **no decision timers** and no automatic strategic choices for human pl
 
 ### Connections, departure, and spectators
 
-- Guests receive a cryptographically random, HTTP-only, same-site cookie lasting seven days. Rooms store a SHA-256 digest of that token, never the token itself. A returning browser resumes its seat and receives only its own private cards.
+- Guests receive a cryptographically random, HTTP-only, same-site cookie lasting seven days. Rooms store a SHA-256 digest of that token, never the token itself. A returning browser resumes its seat; its unrevealed cards stay hidden after reconnecting or refreshing.
 - Clients heartbeat every 5 seconds. After 20 seconds without a heartbeat, the server marks the connection lost. The **90-second grace period starts at that detection threshold**. During the grace period the entire active match pauses, including automatic phases; no player's choice is made on their behalf.
-- A reconnect before the deadline restores the same seat. A return after the deadline cannot revive the ended match. The server cleanly ends it, preserves completed history, and offers a return to the lobby.
+- A reconnect before the deadline restores the same seat. A return after the deadline cannot revive the ended match. The server cleanly ends it and preserves completed history. In bot games, the original human regains their reserved seat and can return to the lobby for a new round.
 - Explicitly leaving during a match ends it immediately if the departing participant is a player. A spectator may leave without ending the match.
+- Returning the whole table to the lobby is a host action; guests and spectators cannot reset everyone else's readiness.
 - Host privileges transfer to the connected seated player with the earliest `joinedAt`, breaking timestamp ties by lexicographically ascending participant ID. Transfer occurs when the host disconnects or leaves; reconnecting does not reclaim host privileges. If no eligible player exists, there is temporarily no host; the first eligible reconnect or seat claim restores one using the same rule. The host browser never owns authoritative state.
 - Spectators can join during play. They receive target, burns, public cards, hand sizes, phase/turn, public events, and completed results. Hidden slots contain `card: null` and opaque slot identifiers independent of physical card identity.
 - Up to 5 players and 25 total room participants are allowed. Seat claims are permitted between rounds on a first-come basis, including from the results screen. Seats cannot be claimed during an active match. When no match is active, disconnected reservations become spectator seats after their 90-second grace expires, freeing room for new players. Starting a new match also converts any remaining disconnected seats to spectator seats, so they cannot unexpectedly rejoin its active roster.
 
 Automatic phase advancement and disconnection deadlines are enforced on server requests and event-stream refreshes, and by the maintenance endpoint. With all browsers closed and no maintenance scheduler, an expired match is resolved on its next access. For unattended production rooms, configure the scheduler described below; a scheduler's interval limits how quickly an unattended expiration is physically recorded. The persisted deadline remains authoritative.
+
+Burned cards are enlarged in the table strip. Hover or focus a burned/opponent card for a large preview; click, tap, or press Enter for its full-size inspection dialog. Hidden cards remain blank-backed in every preview, and inspecting a card never submits a game decision.
 
 ## Architecture and privacy
 
@@ -100,13 +106,13 @@ Automatic phase advancement and disconnection deadlines are enforced on server r
 
 Supabase stores a complete authoritative room record in a server-only RLS-enabled table. The room revision is updated with a compare-and-swap SQL function; competing writes retry against the latest state and revalidate their command. The winning write atomically updates an independent UUID/revision signal row. Private state is never placed in a browser-readable record or Realtime payload. The memory store performs its synchronous transition and commit without an intervening await, providing equivalent serialization within one process.
 
-Only the **server** holds the service-role key. Server-side Realtime listens to revision signals and refreshes authorized views. Each browser receives a separately projected snapshot over an authenticated SSE route, with a 1.5-second polling fallback. Streams roll over every 50 seconds for compatibility with 60-second server-function limits. Client code does not connect to Supabase or receive its keys.
+Only the **server** holds the service-role key. Server-side Realtime waits for PostgreSQL subscription readiness, listens to revision signals and refreshes authorized views. Each browser receives a separately projected snapshot over an authenticated SSE route, with a 1.5-second polling fallback. Streams roll over every 50 seconds for compatibility with 60-second server-function limits. Client code does not connect to Supabase or receive its keys. Failed streams reconnect with increasing delays up to 30 seconds; scheduled rotations do not show a false outage.
 
 Every player command checks membership, role, round, phase, turn, completed-action flags, and bounds. Command IDs prevent duplicate execution; heartbeats cannot evict the command history. Start requests also include their expected round, preventing an old start request from starting a later round. The most recent 1,024 non-heartbeat command IDs are retained. Phase and per-player completion checks continue to reject stale game commands even beyond that window.
 
 Inputs have strict Zod schemas, bounded body sizes, integer checks, normalized names, and a 20-character maximum. Guest names allow Unicode letters/numbers, spaces, periods, apostrophes, underscores, and hyphens; HTML, controls, and decorative symbols are rejected. Names are not globally unique. React renders untrusted names as text. The app does not use a profanity service or collect personal details.
 
-Mutation routes enforce exact-origin requests and same-site cookies. Rate limits cover creation, joining, reads, streams, and commands. Supabase mode uses atomic database-backed limit buckets. Configure `TRUST_PROXY=true` and a header that your actual trusted proxy sanitizes to enable per-IP network limits; otherwise network creation/joining limits are shared, while each session has its own quota. Do not trust client-supplied forwarding headers at an unprotected origin.
+Mutation routes enforce exact-origin requests and same-site cookies. Rate limits cover creation, joining, reads, streams, commands, and a separate heartbeat allowance. A session can create 30 rooms per five minutes, including bot tables. Responses include `Retry-After` when throttled. Heartbeats never overlap, browser-focus events are debounced, and throttled heartbeats wait before retrying. Supabase mode uses atomic database-backed buckets. Vercel automatically uses its sanitized `x-vercel-forwarded-for` header for network limits. On other hosts, configure `TRUST_PROXY=true` and a header that your trusted proxy sanitizes. Missing or invalid addresses use session limits without a shared global network bucket. Do not trust client-supplied forwarding headers at an unprotected origin.
 
 ## Supabase setup
 
@@ -134,7 +140,7 @@ APP_ORIGIN=http://localhost:3000
 CRON_SECRET=YOUR_RANDOM_SECRET_AT_LEAST_32_CHARACTERS
 ```
 
-Never prefix the service-role key with `NEXT_PUBLIC_`. Never commit `.env.local`. Do not put keys in invitation links, logs, browser storage, or client components.
+The key variable accepts a server secret key (`sb_secret_...`) or a legacy `service_role` key. Never use a publishable/anon key here or prefix the server key with `NEXT_PUBLIC_`. Never commit `.env.local` or put real credentials in `.env.example`. Run `npm run check:secrets` before pushing. Do not put keys in invitation links, logs, browser storage, or client components.
 
 5. Restart `npm run dev`, create a room, and use separate browser profiles to join. The interface should show **SUPABASE MULTIPLAYER**, rather than the local-development banner.
 
@@ -171,7 +177,7 @@ For a local smoke test of the production bundle only, `SUMMIN_BACKEND=local` plu
 
 ## Accessibility, animation, and audio
 
-Native modal dialogs trap keyboard focus, close with Escape, and restore focus. Inputs have labels, cards have rank/suit/value descriptions, and active turns have text indicators. Touch controls, wrapped hands, mobile table layouts, readable card faces, visible focus states, and public/private labels are included. Motion respects system reduced-motion preferences and the explicit device preference. Server state remains authoritative when animation is interrupted or skipped.
+Native modal dialogs trap keyboard focus, close with Escape, and restore focus. Inputs have labels, revealed cards have rank/suit/value descriptions, and active turns have text indicators. Touch controls, wrapped hands, mobile table layouts, readable card faces, visible focus states, and revealed/hidden labels are included. Motion respects system reduced-motion preferences and the explicit device preference. Server state remains authoritative when animation is interrupted or skipped.
 
 Cards move from the shared-deck position to their hand slots and use stable, identity-independent slot keys. Public reveals flip card faces with backface protection. An audio manager owns one lazy AudioContext, a typed sound registry, throttled sound voices, persistent settings, independent effects/music volumes, mute, test playback, and optional synthesized ambient harmony. Browser audio unlocks only after a user gesture. Audio failures do not interrupt play.
 
@@ -189,9 +195,9 @@ The only persistent browser data is the HTTP-only guest session cookie and local
 - **Room gone after restarting dev:** expected in memory mode. Configure Supabase for durability.
 - **Spectator cannot claim a seat:** a round is active or all five seats are occupied. Claim between rounds or after returning to the lobby.
 - **Browser tests don’t start:** install Chromium; ensure port 3100 is free and no unrelated Next dev server holds this checkout’s `.next/dev/lock`.
-- Local mode is single-process and ephemeral. Supabase deployment, RLS behavior against an actual project, and hosted Realtime need the credentialed integration check and a post-deployment multiplayer smoke test; they are not claimed as verified without that infrastructure.
+- Local mode is single-process and ephemeral. Credentialed tests verify hosted Supabase authorization, concurrency and Realtime; the production build has also been exercised against that backend. Every public deployment still needs its own environment configuration and a cross-device multiplayer smoke test. See `VALIDATION.md` for the exact checks performed.
 - The room keeps the last 50 completed summaries, not long-term accounts or cross-session statistics. Aborted rounds keep their current sanitized table view and are not scored or inserted into completed history.
 - The MVP has no turn timers, bots in multiplayer, chat, public matchmaking, wagers, account system, moderation dashboard, or third-party analytics.
 - The initial dependency audit reports a development-only `braces` advisory through Next’s ESLint plugin/glob dependency. No patched `braces` version is published in this environment. `npm audit --omit=dev` is clean; avoid untrusted filesystem glob patterns and update the lint dependency when an upstream fix is available. Do not downgrade the application framework just to conceal an advisory.
 
-See `tests/engine.test.ts`, `tests/rooms.test.ts`, `tests/modes.test.ts`, `tests/origin.test.ts`, `tests/config.test.ts`, `tests/supabase.test.ts`, and `e2e/` for executable rule, coordination, mode, privacy, backend/origin, database, and browser checks. Browser checks include a real offline interruption, a detected server pause, restoration of the existing seat, complete multiplayer/solo/bot rematches, continuous 3D card elements, centered controls, loopback guest entry, and persistent audio/motion preferences.
+See `tests/engine.test.ts`, `tests/rooms.test.ts`, `tests/modes.test.ts`, `tests/origin.test.ts`, `tests/config.test.ts`, `tests/supabase.test.ts`, and `e2e/` for executable rule, coordination, mode, privacy, backend/origin, database, and browser checks. Browser checks include a real offline interruption, a detected server pause, restoration of the existing seat, complete multiplayer/bot rematches, continuous 3D card elements, centered controls, loopback guest entry, and persistent audio/motion preferences.

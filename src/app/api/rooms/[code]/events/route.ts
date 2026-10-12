@@ -51,9 +51,11 @@ export async function GET(
               last = encoded;
             }
           } catch {
-            emit({ error: "Room connection interrupted. Reconnecting…" });
-            cleanup();
-            controller.close();
+            if (!stopped) {
+              emit({ error: "Room connection interrupted. Reconnecting…" });
+              cleanup();
+              controller.close();
+            }
           } finally {
             inFlight = false;
           }
@@ -63,7 +65,9 @@ export async function GET(
         // Server-side Realtime receives only UUID/revision signals. All card views are reauthorized here.
         if (rooms.store instanceof SupabaseStore) {
           subscription = rooms.store.client
-            .channel(`room-${first.id}-${crypto.randomUUID()}`)
+            .channel(`room-${first.id}-${crypto.randomUUID()}`, {
+              config: { postgres_changes_options: { wait: true, timeout: 15000 } },
+            })
             .on(
               "postgres_changes",
               {

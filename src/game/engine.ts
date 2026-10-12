@@ -36,21 +36,6 @@ export function makeRound(
     ids.length >= 2 && ids.length <= 5 && new Set(ids).size === ids.length,
     "A round needs 2–5 distinct players.",
   );
-  return createRound(ids, round, starterIndex, random);
-}
-export function makeSoloRound(
-  id: string,
-  round: number,
-  random: RandomInt,
-): GameState {
-  return createRound([id], round, 0, random);
-}
-function createRound(
-  ids: string[],
-  round: number,
-  starterIndex: number,
-  random: RandomInt,
-): GameState {
   const range = rulesFor(ids.length);
   const order = [
     ...ids.slice(starterIndex % ids.length),
@@ -294,7 +279,8 @@ export function act(
   assertInventory(s);
   return s;
 }
-export function projectGame(s: GameState, ownerId?: string): GameView {
+// A card is unknown to everyone, including its owner, until a staged reveal.
+export function projectGame(s: GameState): GameView {
   const { deck, players, ...publicState } = s;
   return {
     ...structuredClone(publicState),
@@ -318,7 +304,7 @@ export function projectGame(s: GameState, ownerId?: string): GameView {
         slotId: `${s.round}:${p.id}:${i}`,
         public: c.revealed,
         dealOrder: c.dealOrder,
-        card: c.revealed || p.id === ownerId ? { ...c.card } : null,
+        card: c.revealed ? { ...c.card } : null,
       })),
     })),
   };

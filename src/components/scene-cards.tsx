@@ -1,17 +1,15 @@
 "use client";
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import type { CSSProperties } from "react";
 import { motion } from "motion/react";
 import { PlayingCard } from "./card";
-import type { Card } from "@/game/types";
+import { ShowcaseCard } from "./showcase-card";
 
 type Position = { x: number; y: number; scale: number };
-const faces: (Card | null)[] = [
-  { id: "spades-13", rank: 13, value: 13, suit: "spades" },
-  { id: "diamonds-7", rank: 7, value: 7, suit: "diamonds" },
-  null,
-];
+const cards = [0, 1, 2, 3, 4, 5];
+const subscribeHydration = () => () => {};
 
-// The same three DOM cards exist from the landing page through the table.
+// The same six DOM cards exist from the landing page through the table.
 // Only their destinations change; room navigation never replaces this scene.
 export function SceneCards({
   scene,
@@ -21,7 +19,24 @@ export function SceneCards({
   reduced: boolean;
 }) {
   const [positions, setPositions] = useState<Position[]>([]);
+  const [visible, setVisible] = useState(true);
+  const [pageVisible, setPageVisible] = useState(true);
+  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const landing = scene === "landing";
+  useEffect(() => {
+    const visibility = () => setPageVisible(!document.hidden);
+    visibility();
+    document.addEventListener("visibilitychange", visibility);
+    return () => document.removeEventListener("visibilitychange", visibility);
+  }, []);
+  useEffect(() => {
+    const hero = document.querySelector(".hero");
+    if (!hero) return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, [landing]);
+  const running = hydrated && landing && !reduced && visible && pageVisible;
   useLayoutEffect(() => {
     let frame = 0;
     const measure = () => {
@@ -31,7 +46,7 @@ export function SceneCards({
         const destination = document
           .querySelector("[data-scene-deck]")
           ?.getBoundingClientRect();
-        const measured = [0, 1, 2].map((i) => {
+        const measured = cards.map((i) => {
           const rect = landing
             ? document
                 .querySelector(`[data-scene-anchor="${i}"]`)
@@ -39,9 +54,9 @@ export function SceneCards({
             : destination;
           return rect && root
             ? {
-                x: rect.left - root.left + (landing ? 0 : i * 2),
-                y: rect.top - root.top - (landing ? 0 : i * 2),
-                scale: rect.width / 131,
+                x: rect.left - root.left + (landing ? 0 : i * 0.8),
+                y: rect.top - root.top - (landing ? 0 : i * 0.8),
+                scale: rect.width / 130,
               }
             : null;
         });
@@ -67,7 +82,7 @@ export function SceneCards({
   }, [scene, landing]);
   return (
     <div
-      className={`scene-cards ${landing ? "at-landing" : "at-deck"}`}
+      className={`scene-cards ${landing ? "at-landing" : "at-deck"} ${running ? "scene-running" : "scene-paused"}`}
       aria-hidden="true"
       data-scene={scene}
     >
@@ -91,9 +106,9 @@ export function SceneCards({
         >
           <motion.div
             animate={{
-              rotateZ: landing ? [-16, 18, -9][i] : 0,
-              rotateX: landing ? [12, -9, 14][i] : 10,
-              rotateY: landing ? [-16, 16, -12][i] : 0,
+              rotateZ: landing ? [-14, 15, 10, -13, -8, 17][i] : 0,
+              rotateX: landing ? [8, -6, 10, -8, 6, -10][i] : 0,
+              rotateY: landing ? [-12, 10, -8, 12, -6, 8][i] : 0,
             }}
             transition={{
               duration: reduced ? 0 : 0.9,
@@ -104,12 +119,8 @@ export function SceneCards({
               transformStyle: "preserve-3d",
             }}
           >
-            <div className="scene-card-content">
-              <PlayingCard
-                card={landing ? faces[i] : null}
-                size="hero"
-                silent
-              />
+            <div className="scene-card-content" style={{ "--drift-time": `${7 + i * 0.9}s`, "--drift-delay": `${-i * 1.7}s` } as CSSProperties}>
+              <ShowcaseCard index={i} landing={landing} running={running} />
             </div>
           </motion.div>
         </motion.div>

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { RuleError } from "@/game/engine";
@@ -110,35 +111,41 @@ export function service() {
 export async function limit(
   req: NextRequest,
   tokenValue: string,
-  category: "create" | "join" | "command" | "stream" | "read",
+  category: "create" | "join" | "command" | "heartbeat" | "stream" | "read",
 ) {
   const store = getStore();
   const [max, seconds] =
     category === "create"
-      ? [8, 3600]
+      ? [30, 300]
       : category === "join"
         ? [30, 60]
         : category === "stream"
-          ? [20, 60]
+          ? [30, 60]
           : category === "read"
             ? [300, 60]
-            : [100, 60];
-  if (!(await store.rate(`${category}:${hashToken(tokenValue)}`, max, seconds)))
-    throw new ApiError(429, "Too many requests. Please wait and try again.");
+            : category === "heartbeat"
+              ? [60, 60]
+              : [100, 60];
+  // Versioned buckets keep old hour-long creation limits from affecting this policy.
+  if (!(await store.rate(`v2:${category}:${hashToken(tokenValue)}`, max, seconds)))
+    throw new ApiError(429, "Too many requests. Please wait before trying again.", seconds);
   if (category === "create" || category === "join") {
-    const ip =
-      process.env.TRUST_PROXY === "true"
-        ? req.headers.get(process.env.PROXY_IP_HEADER || "x-real-ip") ||
-          "unknown"
-        : "shared-network";
+    const header = process.env.VERCEL === "1"
+      ? "x-vercel-forwarded-for"
+      : process.env.TRUST_PROXY === "true"
+        ? process.env.PROXY_IP_HEADER || "x-real-ip"
+        : null;
+    const ip = header ? req.headers.get(header)?.trim() : null;
+    // Unknown addresses must never put every visitor in one global bucket.
+    if (!ip || !isIP(ip)) return;
     if (
       !(await store.rate(
-        `network:${category}:${hashToken(ip)}`,
+        `v2:network:${category}:${hashToken(ip)}`,
         category === "create" ? 60 : 300,
         60,
       ))
     )
-      throw new ApiError(429, "Too many room requests. Please wait a minute.");
+      throw new ApiError(429, "Too many room requests. Please wait a minute.", 60);
   }
 }
 export function json(data: unknown, guestToken?: string) {
@@ -162,7 +169,13 @@ export function failure(e: unknown) {
       { status: 400 },
     );
   if (e instanceof ApiError)
-    return NextResponse.json({ error: e.message }, { status: e.status });
+    return NextResponse.json(
+      { error: e.message, ...(e.retryAfter ? { retryAfter: e.retryAfter } : {}) },
+      { status: e.status, headers: {
+        "Cache-Control": "no-store, private",
+        ...(e.retryAfter ? { "Retry-After": String(e.retryAfter) } : {}),
+      } },
+    );
   if (e instanceof RuleError)
     return NextResponse.json({ error: e.message }, { status: 409 });
   // Never log room records, commands, secrets, or raw provider error bodies.

@@ -12,6 +12,7 @@
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "check:secrets": "node scripts/check-secrets.mjs",
     "test": "vitest run",
     "test:engine": "vitest run tests/engine.test.ts",
     "test:integration": "vitest run tests/rooms.test.ts tests/supabase.test.ts",

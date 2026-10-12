@@ -15,6 +15,8 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
   browser,
   page,
 }) => {
+  // Includes an intentional offline window and two complete rounds.
+  test.setTimeout(240000);
   const clientErrors: string[] = [];
   page.on("pageerror", (error) => clientErrors.push(error.message));
   await page.goto("/");
@@ -72,13 +74,12 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
   const friendState = await state(friend, code),
     own = addition.game!.players.find((p) => p.id === addition.me)!,
     theirs = friendState.game!.players.find((p) => p.id === friendState.me)!;
-  expect(own.hand.every((c) => c.card !== null)).toBe(true);
-  expect(theirs.hand.every((c) => c.card !== null)).toBe(true);
-  const hiddenFriendIds = theirs.hand
-    .filter((c) => !c.public)
-    .map((c) => c.card!.id);
-  for (const id of hiddenFriendIds)
-    expect(JSON.stringify(addition)).not.toContain(JSON.stringify(id));
+  for (const player of [own, theirs]) {
+    expect(player.hand.filter((c) => !c.public).every((c) => c.card === null)).toBe(true);
+    expect(player.hand.filter((c) => c.public)).toHaveLength(Math.floor(player.hand.length / 2));
+  }
+  await expect(page.locator('.own-hand [data-card="hidden"]')).toHaveCount(4);
+  await expect(friend.locator('.own-hand [data-card="hidden"]')).toHaveCount(5);
   await expect(
     page.locator('[aria-label="Other players"] [data-card="hidden"]'),
   ).toHaveCount(5);
@@ -115,11 +116,7 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
       p.hand.filter((c) => !c.public).every((c) => c.card === null),
     ),
   ).toBe(true);
-  for (const player of [own, theirs])
-    for (const c of player.hand.filter((c) => !c.public))
-      expect(JSON.stringify(publicView)).not.toContain(
-        JSON.stringify(c.card!.id),
-      );
+  expect(publicView.game!.players).toEqual(addition.game!.players);
   const rejected = await spectator.request.patch(`/api/rooms/${code}`, {
     data: {
       requestId: crypto.randomUUID(),
@@ -248,6 +245,7 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
   expect(nextResult.game!.events.filter((e) => e.kind === "skip")).toHaveLength(
     2,
   );
+  await friend.getByRole("button", { name: "Review the revealed table" }).click();
   await friend.getByRole("button", { name: "Open settings" }).click();
   await expect(friend.getByRole("dialog")).toBeVisible();
   await friend.getByRole("switch", { name: "Ambient music" }).click();
@@ -262,6 +260,7 @@ test("complete real multiplayer match, privacy, spectators, mobile, rematch and 
   await expect(
     friend.getByRole("region", { name: "Round results" }),
   ).toBeVisible();
+  await friend.getByRole("button", { name: "Review the revealed table" }).click();
   await friend.getByRole("button", { name: "Open settings" }).click();
   await expect(friend.getByLabel("Effects volume")).toHaveValue("0.2");
   await expect(
@@ -299,7 +298,7 @@ test("tutorial follows real rules and dialogs manage focus on mobile", async ({
     .fill("10");
   await page.getByRole("button", { name: "Confirm & deal" }).click();
   await expect(
-    page.getByText("Your full hand", { exact: false }),
+    page.getByText("Your hand ·", { exact: false }),
   ).toContainText("5 cards public");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Pass", exact: true }).click();

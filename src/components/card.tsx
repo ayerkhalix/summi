@@ -29,18 +29,25 @@ export function Suit({
 export const rankLabel = (rank: number) =>
   ({ 1: "A", 11: "J", 12: "Q", 13: "K" })[rank] ?? String(rank);
 export const PlayingCard = memo(function PlayingCard({
-  card,
+  card: dealtCard,
+  faceUp = true,
+  showBack = false,
   isPublic = false,
   size = "normal",
   delay = 0,
   silent = false,
 }: {
   card: CardType | null;
+  faceUp?: boolean;
+  showBack?: boolean;
   isPublic?: boolean;
   size?: "normal" | "small" | "hero";
   delay?: number;
   silent?: boolean;
 }) {
+  // Hand cards need an explicit reveal, even if a stale payload has a face.
+  const card = faceUp ? dealtCard : null;
+  const back = showBack || !card;
   const reduce = useReducedMotion();
   const previous = useRef(card?.id ?? null);
   const element = useRef<HTMLDivElement>(null),
@@ -117,8 +124,8 @@ export const PlayingCard = memo(function PlayingCard({
     >
       <motion.div
         className="card-flipper"
-        animate={{ rotateY: card ? 0 : 180 }}
-        initial={isPublic && !silent && !reduce ? { rotateY: 180 } : false}
+        animate={{ rotateY: back ? 180 : 0 }}
+        initial={{ rotateY: !back && (!isPublic || silent || reduce) ? 0 : 180 }}
         transition={{
           duration: reduce || audio.snapshot().reducedMotion ? 0 : MOTION.flip,
         }}

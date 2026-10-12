@@ -10,8 +10,9 @@ describe.skipIf(!url || !key || !anon)(
   "isolated Supabase authorization and transactions",
   () => {
     it("denies anon private reads, writes, RPCs and Realtime signal reads; CAS handles concurrent joins", async () => {
+      const clock = Date.now();
       const store = new SupabaseStore(url!, key!),
-        rooms = new RoomService(store),
+        rooms = new RoomService(store, () => clock),
         token = hashToken(randomUUID());
       const room = await rooms.create("Test host", token);
       try {
@@ -58,6 +59,47 @@ describe.skipIf(!url || !key || !anon)(
       } finally {
         await store.client.from("summin_rooms").delete().eq("code", room.code);
       }
-    });
+    }, 120000);
+    it("delivers server-only revision signals and atomically shares commands between server instances", async () => {
+      const clock = Date.now();
+      const store = new SupabaseStore(url!, key!);
+      const host = hashToken(randomUUID()), friend = hashToken(randomUUID());
+      const rooms = new RoomService(store, () => clock);
+      const otherServer = new RoomService(new SupabaseStore(url!, key!), () => clock);
+      const room = await rooms.create("Signal host", host);
+      let revision = -1;
+      const channel = store.client.channel(`test-${randomUUID()}`, {
+        config: { postgres_changes_options: { wait: true, timeout: 15000 } },
+      }).on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "summin_room_signals", filter: `id=eq.${room.id}`,
+      }, ({ new: payload }) => { revision = Number(payload.revision); });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("Realtime subscription timed out")), 20000);
+          channel.subscribe((status) => {
+            if (status === "SUBSCRIBED") { clearTimeout(timeout); resolve(); }
+            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+              clearTimeout(timeout); reject(new Error("Realtime subscription unavailable"));
+            }
+          });
+        });
+        const joined = await otherServer.join(room.code, "Signal friend", "player", friend);
+        await expect.poll(() => revision, { timeout: 15000 }).toBe(joined.version);
+        await Promise.all([
+          rooms.command(room.code, host, randomUUID(), { type: "ready", ready: true }),
+          otherServer.command(room.code, friend, randomUUID(), { type: "ready", ready: true }),
+        ]);
+        const shared = await rooms.read(room.code, host);
+        expect(shared.members.every((m) => m.ready)).toBe(true);
+        const started = (await rooms.command(room.code, host, randomUUID(), { type: "start" }, 0))!;
+        expect(started.game?.phase).toBe("burn");
+        const friendView = await otherServer.read(room.code, friend);
+        expect(friendView.game).toEqual(started.game);
+        expect(JSON.stringify(friendView)).not.toContain("tokenHash");
+      } finally {
+        await store.client.removeChannel(channel);
+        await store.client.from("summin_rooms").delete().eq("code", room.code);
+      }
+    }, 120000);
   },
 );

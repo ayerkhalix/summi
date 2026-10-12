@@ -78,7 +78,6 @@ describe("official deck and setup", () => {
       committed: true,
       initialCount: null,
     });
-    expect(projectGame(s, "a").players[0].initialCount).toBeNull();
     expect(() =>
       act(s, "a", { type: "select", count: 8, phase: s.phase, round: 1 }, rng),
     ).toThrow();
@@ -262,20 +261,53 @@ describe("scoring and private projections", () => {
   });
   it("overshooting remains eligible", () =>
     expect(winners([80, 101])).toEqual(["1"]));
-  it("public and spectator serializations never contain hidden identities, owner sees only their hand", () => {
+  it("never serializes hidden identities, including the player's own cards", () => {
     const { state } = toFirst();
-    for (const owner of [undefined, "spectator", "p0"]) {
-      const view = projectGame(state, owner),
-        json = JSON.stringify(view);
-      expect(json).not.toContain('"deck":');
-      for (const p of state.players)
-        for (const c of p.hand.filter((c) => !c.revealed)) {
-          if (p.id === owner) expect(json).toContain(JSON.stringify(c.card.id));
-          else expect(json).not.toContain(JSON.stringify(c.card.id));
-        }
-      for (const p of view.players)
-        for (const c of p.hand)
-          if (p.id !== owner && !c.public) expect(c.card).toBeNull();
+    const view = projectGame(state),
+      json = JSON.stringify(view);
+    expect(json).not.toContain('"deck":');
+    for (const p of state.players)
+      for (const c of p.hand.filter((c) => !c.revealed))
+        expect(json).not.toContain(JSON.stringify(c.card.id));
+    for (const p of view.players)
+      for (const c of p.hand)
+        if (!c.public) expect(c.card).toBeNull();
+  });
+});
+
+describe("complete rounds across different draws", () => {
+  it.each([2, 3, 4, 5] as PlayerCount[])("conserves cards and conceals every unknown face across 32 %i-player rounds", (count) => {
+    for (let seed = 1; seed <= 32; seed++) {
+      const rng = seeded(seed);
+      let state = makeRound(Array.from({ length: count }, (_, i) => `p${i}`), seed, seed % count, rng);
+      const revealed = new Set<string>();
+      for (let step = 0; state.phase !== "round_results" && step < 40; step++) {
+        const view = projectGame(state);
+        const serialized = JSON.stringify(view);
+        for (const player of state.players)
+          for (const held of player.hand) {
+            if (revealed.has(held.card.id)) expect(held.revealed).toBe(true);
+            if (held.revealed) revealed.add(held.card.id);
+            else expect(serialized).not.toContain(JSON.stringify(held.card.id));
+          }
+        if (state.phase === "initial_selection") {
+          const [min, max] = RULES[count].initial;
+          const player = state.players.find((p) => p.initialCount === null)!;
+          state = act(state, player.id, { type: "select", count: min + rng(max - min + 1), phase: state.phase, round: seed }, rng);
+        } else if (view.activePlayerId) {
+          const player = view.players.find((p) => p.id === view.activePlayerId)!;
+          const cap = state.phase === "first_additions" ? 3 : player.cap;
+          state = act(state, player.id, { type: "add", count: rng(cap + 1), phase: state.phase, round: seed }, rng);
+        } else state = advance(state, rng);
+        assertInventory(state);
+      }
+      expect(state.phase).toBe("round_results");
+      expect(state.players.every((p) => p.hand.every((held) => held.revealed))).toBe(true);
+      for (const result of state.results)
+        expect(result.total).toBe(state.players.find((p) => p.id === result.playerId)!.hand.reduce((sum, held) => sum + held.card.value, 0));
+      const closest = Math.min(...state.results.map((r) => Math.abs(r.total - state.target)));
+      expect(state.results.filter((r) => r.winner).every((r) => Math.abs(r.total - state.target) === closest)).toBe(true);
+      expect(state.results.some((r) => r.winner)).toBe(true);
     }
   });
 });

@@ -193,7 +193,8 @@ export function Rules({
           </p>
           <h3>02 / Play the odds</h3>
           <p>
-            Half your initial cards, rounded down, become public. On your turn,
+            Cards start face down, hidden from everyone, including you. Half
+            your initial cards, rounded down, are revealed. On your turn,
             add 0–3 cards. Zero is a final pass for that addition window. The
             next reveal leaves exactly one hidden card.
           </p>
@@ -263,11 +264,11 @@ const tutorialCopy = [
   ],
   [
     "Half the picture.",
-    "The server randomly reveals floor(initial size ÷ 2) of your cards. You can see your entire hand. Your opponent only sees the public cards.",
+    "The server randomly reveals floor(initial size ÷ 2) of your cards. The rest stay face down, hidden from everyone, including you. Use the revealed total and the unseen deck to judge your next move.",
   ],
   [
     "Add, or hold your nerve.",
-    "Choose 0–3 additional cards. They stay private until the next reveal. Choosing zero is final for this window. You cannot reopen it.",
+    "Choose 0–3 additional cards. They stay face down until the next reveal. Choosing zero is final for this window. You cannot reopen it.",
   ],
   [
     "One secret remains.",
@@ -331,7 +332,7 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
     return advance(g, rng);
   }, [step, initial, addition, last]);
   const own = state.players[0],
-    total = own.hand.reduce((n, c) => n + c.card.value, 0);
+    total = own.hand.reduce((n, c) => n + (c.revealed ? c.card.value : 0), 0);
   return (
     <Modal title="A seat at the practice table." onClose={onClose} wide>
       <div className="tutorial-top">
@@ -359,14 +360,15 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
       {own.hand.length > 0 && (
         <>
           <p className="fine-print">
-            Your full hand · {total} total ·{" "}
+            Your hand · {total} revealed total ·{" "}
             {own.hand.filter((c) => c.revealed).length} cards public
           </p>
           <div className="tutorial-hand">
             {own.hand.map((c, i) => (
               <PlayingCard
                 key={c.card.id}
-                card={c.card}
+                card={c.revealed ? c.card : null}
+                faceUp={c.revealed}
                 isPublic={c.revealed}
                 size="small"
                 delay={i * 0.03}

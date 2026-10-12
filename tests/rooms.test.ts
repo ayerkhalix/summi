@@ -56,6 +56,14 @@ describe("authoritative rooms", () => {
       "ready",
     );
   });
+  it("prevents guests and spectators from resetting the whole table's readiness", async () => {
+    const r = await pair();
+    await rooms.join(r.code, "Watcher", "spectator", s);
+    for (const who of [b, s])
+      await expect(command(r.code, who, { type: "lobby" })).rejects.toThrow("Only the host");
+    const unchanged = await rooms.read(r.code, a);
+    expect(unchanged.members.filter((m) => m.role === "player").every((m) => m.ready)).toBe(true);
+  });
   it("concurrent joins cannot overfill five seats", async () => {
     const r = await rooms.create("Ayer", a);
     const results = await Promise.allSettled(

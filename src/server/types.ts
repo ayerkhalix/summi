@@ -1,5 +1,5 @@
 import type { GameState, GameView, PlayerCommand, Result } from "@/game/types";
-export type GameMode = "friends" | "solo" | "bots";
+export type GameMode = "friends" | "bots";
 export type Member = {
   isBot?: boolean;
   id: string;

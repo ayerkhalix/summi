@@ -3,7 +3,6 @@ import {
   act,
   advance,
   makeRound,
-  makeSoloRound,
   projectGame,
 } from "@/game/engine";
 import { botDecision } from "@/game/bot";
@@ -36,6 +35,14 @@ function member(room: Room, tokenHash: string) {
 function checkExpiry(room: Room, now: number) {
   if (now - room.lastActivity > 86400000)
     throw new ApiError(410, "This room has expired. Create a new room.");
+}
+function reconnectMember(room: Room, m: Member, now: number) {
+  m.lastSeen = now;
+  m.disconnectedAt = null;
+  // A practice owner's seat stays reserved even after the interrupted round ends.
+  if (room.mode === "bots" && !m.isBot && room.game?.players.some((p) => p.id === m.id)) {
+    m.role = "player";
+  }
 }
 export function migrateHost(room: Room) {
   const current = room.members.find((m) => m.id === room.hostId);
@@ -114,7 +121,7 @@ export function maintain(room: Room, now: number): Room {
     else {
       const bot = pendingBot(room);
       const decision =
-        bot && botDecision(projectGame(room.game, bot.id), bot.id);
+        bot && botDecision(projectGame(room.game), bot.id);
       if (bot && decision)
         room.game = act(room.game, bot.id, decision, randomInt);
     }
@@ -164,17 +171,14 @@ function startRound(room: Room, now: number) {
   const players = room.members.filter(
     (m) => m.role === "player" && m.disconnectedAt === null,
   );
-  const solo = room.mode === "solo";
   if (
-    players.length < (solo ? 1 : 2) ||
-    players.length > (solo ? 1 : 5) ||
+    players.length < 2 ||
+    players.length > 5 ||
     players.some((m) => !m.ready)
   )
     throw new ApiError(
       409,
-      solo
-        ? "Your solo seat must be ready to start."
-        : "You need 2–5 connected players, all ready, to start.",
+      "You need 2–5 connected players, all ready, to start.",
     );
   for (const former of room.members)
     if (former.role === "player" && former.disconnectedAt !== null) {
@@ -191,9 +195,7 @@ function startRound(room: Room, now: number) {
       : room.roundNumber
         ? 0
         : randomInt(ids.length);
-  room.game = solo
-    ? makeSoloRound(ids[0], ++room.roundNumber, randomInt)
-    : makeRound(ids, ++room.roundNumber, starter, randomInt);
+  room.game = makeRound(ids, ++room.roundNumber, starter, randomInt);
   room.previousStarter = ids[starter];
   room.status = "playing";
   room.endedReason = null;
@@ -229,9 +231,7 @@ export function viewRoom(
       joinedAt: m.joinedAt,
       disconnectedAt: m.disconnectedAt,
     })),
-    game: room.game
-      ? projectGame(room.game, me.role === "player" ? me.id : undefined)
-      : null,
+    game: room.game ? projectGame(room.game) : null,
   };
 }
 export class RoomService {
@@ -247,16 +247,17 @@ export class RoomService {
     const now = this.now();
     const mode = options.mode ?? "friends";
     const botCount = options.botCount ?? 2;
+    if (!["friends", "bots"].includes(mode))
+      throw new ApiError(400, "Choose friends or bot mode.");
     if (
-      !["friends", "solo", "bots"].includes(mode) ||
-      (mode === "bots" &&
-        (!Number.isInteger(botCount) || botCount < 1 || botCount > 4))
+      mode === "bots" &&
+      (!Number.isInteger(botCount) || botCount < 1 || botCount > 4)
     )
       throw new ApiError(400, "Choose one to four bot opponents.");
     const m: Member = {
       id: randomUUID(),
       tokenHash,
-      name,
+      name: mode === "bots" && !name.trim() ? "You" : name,
       role: "player",
       ready: mode !== "friends",
       joinedAt: now,
@@ -316,8 +317,7 @@ export class RoomService {
       maintain(room, now);
       const existing = room.members.find((m) => m.tokenHash === tokenHash);
       if (existing) {
-        existing.lastSeen = now;
-        existing.disconnectedAt = null;
+        reconnectMember(room, existing, now);
         migrateHost(room);
         return room;
       }
@@ -404,8 +404,7 @@ export class RoomService {
           "This request was already completed. Your room state has been refreshed.",
         );
       if (command.type !== "leave") {
-        m.lastSeen = now;
-        m.disconnectedAt = null;
+        reconnectMember(room, m, now);
       }
       migrateHost(room);
       switch (command.type) {
@@ -446,6 +445,8 @@ export class RoomService {
           setAutomatic(room, now);
           break;
         case "lobby":
+          if (room.hostId !== m.id)
+            throw new ApiError(403, "Only the host can return the table to the lobby.");
           if (room.status === "playing")
             throw new ApiError(
               409,

@@ -5,7 +5,6 @@ import {
   advance,
   assertInventory,
   makeRound,
-  makeSoloRound,
   projectGame,
 } from "@/game/engine";
 import { botDecision } from "@/game/bot";
@@ -13,43 +12,15 @@ import { rulesFor, TIMING } from "@/game/config";
 import { MemoryStore } from "@/server/store";
 import { hashToken, RoomService } from "@/server/rooms";
 
-describe("solo and computer opponents", () => {
-  it("keeps one-player practice separate from official 2–5-player rounds", () => {
-    expect(() => makeRound(["solo"], 1, 0, () => 0)).toThrow("2–5");
-    let game = makeSoloRound("solo", 1, () => 0);
-    expect(game.target).toBe(80);
-    expect(game.burns).toHaveLength(1);
-    game = advance(game, () => 0);
-    game = act(
-      game,
-      "solo",
-      { type: "select", count: 8, round: 1, phase: game.phase },
-      () => 0,
-    );
-    game = advance(
-      advance(game, () => 0),
-      () => 0,
-    );
-    game = act(
-      game,
-      "solo",
-      { type: "add", count: 3, round: 1, phase: game.phase },
-      () => 0,
-    );
-    game = advance(game, () => 0);
-    game = act(
-      game,
-      "solo",
-      { type: "add", count: 1, round: 1, phase: game.phase },
-      () => 0,
-    );
-    game = advance(game, () => 0);
-    assertInventory(game);
-    expect(game.phase).toBe("round_results");
-    expect(game.deck).toHaveLength(39);
-    expect(game.results[0].distance).toBe(
-      Math.abs(game.results[0].total - game.target),
-    );
+describe("computer opponents", () => {
+  it("requires an opponent for every round", () => {
+    expect(() => makeRound(["human"], 1, 0, () => 0)).toThrow("2–5");
+  });
+  it("rejects the removed solo mode at the service boundary", async () => {
+    await expect(new RoomService(new MemoryStore()).create(
+      "Guest", hashToken(randomUUID()),
+      { mode: "solo" as "bots" },
+    )).rejects.toThrow("Choose friends or bot mode.");
   });
   it.each([0, 5, 1.5, NaN])(
     "rejects invalid bot count %s at the service boundary",
@@ -63,7 +34,7 @@ describe("solo and computer opponents", () => {
       ).rejects.toThrow("one to four");
     },
   );
-  it.each([0, 1, 2, 3, 4])(
+  it.each([1, 2, 3, 4])(
     "completes and rematches a server-authoritative practice table with %s bots",
     async (botCount) => {
       let now = 1000000;
@@ -71,13 +42,13 @@ describe("solo and computer opponents", () => {
         service = new RoomService(store, () => now),
         token = hashToken(randomUUID());
       let room = await service.create("Human", token, {
-        mode: botCount ? "bots" : "solo",
-        botCount: botCount || undefined,
+        mode: "bots",
+        botCount,
       });
       const send = (command: Parameters<RoomService["command"]>[3]) =>
         service.command(room.code, token, randomUUID(), command);
       expect(room.game!.players).toHaveLength(botCount + 1);
-      expect(room.mode).toBe(botCount ? "bots" : "solo");
+      expect(room.mode).toBe("bots");
       expect(room.members.filter((m) => m.isBot)).toHaveLength(botCount);
       for (let step = 0; step < 100 && room.status === "playing"; step++) {
         now += 1300;
@@ -104,9 +75,9 @@ describe("solo and computer opponents", () => {
               phase: game.phase,
             },
           }))!;
-        for (const bot of room.game!.players.filter((p) => p.id !== room.me))
+        for (const player of room.game!.players)
           expect(
-            bot.hand.filter((c) => !c.public).every((c) => c.card === null),
+            player.hand.filter((c) => !c.public).every((c) => c.card === null),
           ).toBe(true);
       }
       expect(room.status).toBe("results");
@@ -163,8 +134,19 @@ describe("solo and computer opponents", () => {
     const ended = await service.read(created.code, spectator);
     expect(ended.status).toBe("abandoned");
     expect(ended.game).toEqual(snapshot);
+    const back = (await service.command(created.code, token, randomUUID(), { type: "heartbeat" }))!;
+    expect(back.status).toBe("abandoned");
+    expect(back.me).toBe(created.me);
+    expect(back.members.find((m) => m.id === back.me)?.role).toBe("player");
+    expect(back.hostId).toBe(back.me);
+    await expect(service.command(created.code, spectator, randomUUID(), { type: "claim" })).rejects.toThrow("reserved");
+    await service.command(created.code, token, randomUUID(), { type: "lobby" });
+    await service.command(created.code, token, randomUUID(), { type: "ready", ready: true });
+    const next = (await service.command(created.code, token, randomUUID(), { type: "start" }, 1))!;
+    expect(next.game?.round).toBe(2);
+    expect(next.members.filter((m) => m.role === "player")).toHaveLength(5);
   });
-  it("bots cannot use opponents' hidden identities or deck order", () => {
+  it("bots cannot use any hidden identities or deck order", () => {
     let game = advance(
       makeRound(["bot", "human"], 1, 0, () => 0),
       () => 0,
@@ -180,11 +162,13 @@ describe("solo and computer opponents", () => {
       advance(game, () => 0),
       () => 0,
     );
-    const before = projectGame(game, "bot");
+    const before = projectGame(game);
     const hidden = game.players[1].hand.find((c) => !c.revealed)!;
     [hidden.card, game.deck[0]] = [game.deck[0], hidden.card];
+    const ownHidden = game.players[0].hand.find((c) => !c.revealed)!;
+    [ownHidden.card, game.deck[1]] = [game.deck[1], ownHidden.card];
     game.deck.reverse();
-    const after = projectGame(game, "bot");
+    const after = projectGame(game);
     expect(after).toEqual(before);
     expect(botDecision(after, "bot")).toEqual(botDecision(before, "bot"));
     expect(botDecision(after, "human")).toBeNull();
