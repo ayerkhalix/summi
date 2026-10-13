@@ -96,6 +96,12 @@ for (const viewport of [
         String(own.hand.reduce((sum, card) => sum + (card.card?.value ?? 0), 0)),
       );
       await expect(page.locator(".own-total > span")).toHaveText(hidden ? "REVEALED TOTAL" : "YOUR TOTAL");
+      const expectedOwn = own.hand.filter((held) => held.newlyRevealed).map((held) => held.card!.id).sort();
+      const expectedOthers = room.game!.players.filter((player) => player.id !== room.me)
+        .flatMap((player) => player.hand.filter((held) => held.newlyRevealed).map((held) => held.card!.id)).sort();
+      await expect.poll(() => page.locator(".own-hand .new-reveal .playing-card").evaluateAll((cards) => cards.map((card) => card.getAttribute("data-card")).sort())).toEqual(expectedOwn);
+      await expect.poll(() => page.locator(".opponents .new-reveal .playing-card").evaluateAll((cards) => cards.map((card) => card.getAttribute("data-card")).sort())).toEqual(expectedOthers);
+      await expect(page.locator('.new-reveal [data-card="hidden"]')).toHaveCount(0);
       await stable();
     };
 
@@ -131,7 +137,7 @@ for (const viewport of [
     room = await waitForPhase(page, code, "first_additions", true);
     await expect(page.locator('.own-hand [data-card="hidden"]')).toHaveCount(8);
     await page.evaluate(() => window.scrollTo({ top: 250, behavior: "instant" }));
-    await stable();
+    await visibleHand(8);
 
     room = await act(3);
     const afterAdding = room.game!.players.find((player) => player.id === room.me)!;
@@ -155,6 +161,7 @@ for (const viewport of [
     await page.reload();
     await waitForPhase(page, code, "round_results");
     await expect(page.locator('.own-hand [data-card="hidden"]')).toHaveCount(0);
+    await expect(page.locator(".own-hand .new-reveal")).toHaveCount(2);
   });
 }
 
@@ -168,7 +175,7 @@ test("bot cards need a reveal even when an older payload includes their faces", 
   room.game!.activePlayerId = room.me;
   for (const player of room.game!.players)
     player.hand = Array.from({ length: 8 }, (_, index) => ({
-      slotId: `${player.id}:${index}`, dealOrder: index, public: index < 4,
+      slotId: `${player.id}:${index}`, dealOrder: index, public: index < 4, newlyRevealed: true,
       card: { id: "spades-13", suit: "spades", rank: 13, value: 13 },
     }));
   await page.route(`**/api/rooms/${room.code}`, async (route) => {
@@ -183,6 +190,8 @@ test("bot cards need a reveal even when an older payload includes their faces", 
   await expect(page.locator('.opponents [data-card="hidden"]')).toHaveCount(4);
   await expect(page.locator('.hand-card [data-card="hidden"] .card-front')).toHaveText(Array(8).fill(""));
   await expect(page.locator(".own-total > strong")).toHaveText("52");
+  await expect(page.locator(".hand-card.new-reveal")).toHaveCount(8);
+  await expect(page.locator('.new-reveal [data-card="hidden"]')).toHaveCount(0);
 });
 
 test("bot matches need no name and the removed solo mode is rejected", async ({ request }) => {

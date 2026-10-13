@@ -3,10 +3,10 @@ export const BRAND = {
   tagline: "Know the deck. Play the odds.",
 };
 export const RULES = {
-  2: { target: [80, 150], initial: [7, 16] },
-  3: { target: [55, 110], initial: [5, 11] },
-  4: { target: [40, 85], initial: [4, 8] },
-  5: { target: [30, 70], initial: [3, 6] },
+  2: { target: [70, 150], initial: [7, 16] },
+  3: { target: [45, 110], initial: [5, 11] },
+  4: { target: [30, 85], initial: [4, 8] },
+  5: { target: [20, 70], initial: [3, 6] },
 } as const;
 export type PlayerCount = keyof typeof RULES;
 export const rulesFor = (count: number) => RULES[count as PlayerCount];

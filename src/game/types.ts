@@ -6,7 +6,13 @@ export type Card = {
   rank: number;
   value: number;
 };
-export type HeldCard = { card: Card; revealed: boolean; dealOrder: number };
+export type RevealStage = "first" | "second" | "final";
+export type HeldCard = {
+  card: Card;
+  revealed: boolean;
+  dealOrder: number;
+  revealedIn?: RevealStage;
+};
 export type GamePlayer = {
   id: string;
   hand: HeldCard[];
@@ -51,6 +57,8 @@ export type GameState = {
   events: GameEvent[];
   results: Result[];
   tiebreakApplied: boolean;
+  // Optional for rooms saved before reveal-stage tracking was introduced.
+  latestReveal?: RevealStage | null;
   finalReveal: { total: number; revealed: number; lastSlotId: string | null } | null;
 };
 export type PlayerCommand = {
@@ -64,6 +72,7 @@ export type CardView = {
   slotId: string;
   card: Card | null;
   public: boolean;
+  newlyRevealed?: boolean;
   dealOrder: number;
 };
 export type GameView = Omit<GameState, "deck" | "players"> & {

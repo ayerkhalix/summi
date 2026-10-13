@@ -12,6 +12,13 @@ import { FIRST_ADDITION_MAX, RULES, secondCap, type PlayerCount } from "@/game/c
 import { firstWindow, seeded, selected, toFirst } from "./fixtures";
 
 describe("official deck and setup", () => {
+  it.each([
+    [2, 70, 150], [3, 45, 110], [4, 30, 85], [5, 20, 70],
+  ] as const)("uses the lowered minimum and unchanged maximum for %i players", (count, min, max) => {
+    const ids = Array.from({ length: count }, (_, index) => `p${index}`);
+    expect(makeRound(ids, 1, 0, () => 0).target).toBe(min);
+    expect(makeRound(ids, 1, 0, (upper) => upper - 1).target).toBe(max);
+  });
   it("creates 52 unique physical cards, with every rank mapped correctly", () => {
     const deck = createDeck();
     expect(deck).toHaveLength(52);
@@ -104,6 +111,53 @@ describe("official deck and setup", () => {
 });
 
 describe("reveals and addition windows", () => {
+  it("moves highlights between reveal waves, accumulates final flips, and preserves them on refresh", () => {
+    let { state } = toFirst();
+    const rng = seeded();
+    const highlights = () => projectGame(state).players.flatMap((p) => p.hand).filter((held) => held.newlyRevealed).map((held) => held.card!.id);
+    const first = highlights();
+    expect(first).toHaveLength(8);
+    expect(state.latestReveal).toBe("first");
+    state = act(state, "p0", { type: "add", count: 2, phase: state.phase, round: 1 }, rng);
+    expect(highlights()).toEqual(first);
+    expect(projectGame(state).players.flatMap((p) => p.hand).filter((held) => !held.public).every((held) => !held.newlyRevealed)).toBe(true);
+    state = act(state, "p1", { type: "add", count: 3, phase: state.phase, round: 1 }, rng);
+    const second = highlights();
+    expect(state.latestReveal).toBe("second");
+    expect(second).toHaveLength(11);
+    expect(second.every((id) => !first.includes(id))).toBe(true);
+    expect(projectGame(JSON.parse(JSON.stringify(state)))).toEqual(projectGame(state));
+    state = advance(state, rng);
+    state = firstWindow(state, [1, 0], rng);
+    expect(state.phase).toBe("final_reveal");
+    expect(highlights()).toEqual(second);
+    for (let count = 1; count <= 3; count++) {
+      state = advance(state, rng);
+      expect(state.latestReveal).toBe("final");
+      const final = highlights();
+      expect(final).toHaveLength(count);
+      expect(final.every((id) => !first.includes(id) && !second.includes(id))).toBe(true);
+    }
+    const final = highlights();
+    state = advance(state, rng);
+    expect(state.phase).toBe("round_results");
+    expect(highlights()).toEqual(final);
+    expect(projectGame(JSON.parse(JSON.stringify(state)))).toEqual(projectGame(state));
+    state = makeRound(["p0", "p1"], 2, 1, rng);
+    expect(state.latestReveal).toBeNull();
+    expect(highlights()).toEqual([]);
+  });
+  it("starts tracking the next reveal safely in older rooms without reveal metadata", () => {
+    const { state, rng } = toFirst();
+    const previouslyRevealed = state.players.flatMap((p) => p.hand).filter((held) => held.revealed).map((held) => held.card.id);
+    delete state.latestReveal;
+    for (const held of state.players.flatMap((p) => p.hand)) delete held.revealedIn;
+    expect(projectGame(state).players.flatMap((p) => p.hand).some((held) => held.newlyRevealed)).toBe(false);
+    const updated = firstWindow(state, [0, 0], rng);
+    const highlighted = projectGame(updated).players.flatMap((p) => p.hand).filter((held) => held.newlyRevealed);
+    expect(highlighted).toHaveLength(6);
+    expect(highlighted.every((held) => held.public && held.card && !previouslyRevealed.includes(held.card.id))).toBe(true);
+  });
   it("first reveal shows floor(initial/2), with no duplicates", () => {
     const { state, rng } = selected(2, [9, 15]),
       s = advance(state, rng);

@@ -196,7 +196,8 @@ export function Rules({
             Cards start face down, hidden from everyone, including you. Half
             your initial cards, rounded down, are revealed. On your turn,
             add 0–4 cards. Zero is a final pass for that addition window. The
-            next reveal leaves exactly one hidden card.
+            next reveal leaves exactly one hidden card. Crimson outlines mark
+            the latest reveal; earlier revealed cards lose their outlines.
           </p>
           <h3>03 / Make your final call</h3>
           <p>
@@ -255,7 +256,7 @@ export function Rules({
 const tutorialCopy = [
   [
     "Meet your target.",
-    "Every round has a public target. The closest final total wins, above or below. Your example target comes from the real two-player range: 80–150.",
+    `Every round has a public target. The closest final total wins, above or below. Your example target comes from the real two-player range: ${RULES[2].target.join("–")}.`,
   ],
   [
     "Read what is gone.",
@@ -267,7 +268,7 @@ const tutorialCopy = [
   ],
   [
     "Half the picture.",
-    "The server randomly reveals floor(initial size ÷ 2) of your cards. The rest stay face down, hidden from everyone, including you. Use the revealed total and the unseen deck to judge your next move.",
+    "The server randomly reveals floor(initial size ÷ 2) of your cards. Crimson outlines mark the cards in this reveal. The rest stay face down, hidden from everyone, including you. Use the revealed total and unseen deck to judge your next move.",
   ],
   [
     "Add, or hold your nerve.",
@@ -275,7 +276,7 @@ const tutorialCopy = [
   ],
   [
     "One secret remains.",
-    "The second reveal turns over enough currently hidden cards to leave exactly one hidden. First-window additions are included; public cards stay public.",
+    "The second reveal leaves exactly one hidden card. Crimson outlines move to the newly revealed cards; earlier cards stay face up without an outline. First-window additions are included.",
   ],
   [
     "Your last decision.",
@@ -369,15 +370,16 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
           </p>
           <div className="tutorial-hand">
             {own.hand.map((c, i) => (
-              <PlayingCard
-                key={c.card.id}
-                card={c.revealed ? c.card : null}
-                faceUp={c.revealed}
-                isPublic={c.revealed}
-                size="small"
-                delay={i * 0.03}
-                silent
-              />
+              <span key={c.card.id} className={c.revealed && c.revealedIn === state.latestReveal ? "new-reveal" : undefined}>
+                <PlayingCard
+                  card={c.revealed ? c.card : null}
+                  faceUp={c.revealed}
+                  isPublic={c.revealed}
+                  size="small"
+                  delay={i * 0.03}
+                  silent
+                />
+              </span>
             ))}
           </div>
         </>

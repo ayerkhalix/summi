@@ -10,14 +10,15 @@ import { Icon } from "./icon";
 import { Avatar } from "./table-shared";
 
 type Player = GameView["players"][number];
+const isNewReveal = (held: CardView) => held.public && !!held.card && held.newlyRevealed === true;
 const describeCard = (held: CardView) =>
   held.public && held.card
-    ? `${rankLabel(held.card.rank)} of ${held.card.suit} · value ${held.card.value}`
+    ? `${rankLabel(held.card.rank)} of ${held.card.suit} · value ${held.card.value}${isNewReveal(held) ? " · new this reveal" : ""}`
     : "Hidden card · unknown until its reveal";
 
 // Inspection only reads public faces. Selecting a card never changes the hand.
-export function OwnHand({ player, name, target, active, profile, streak = 0, points = 0, finalSlotId }: {
-  player: Player; name: string; target: number; active: boolean; profile?: PlayerProfile; streak?: number; points?: number; finalSlotId?: string | null;
+export function OwnHand({ player, name, target, active, profile, streak = 0, points = 0 }: {
+  player: Player; name: string; target: number; active: boolean; profile?: PlayerProfile; streak?: number; points?: number;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const hidden = player.hand.filter((card) => !card.public).length;
@@ -47,7 +48,7 @@ export function OwnHand({ player, name, target, active, profile, streak = 0, poi
             <button
               type="button"
               key={held.slotId}
-              className={`hand-card inspect-card ${selected === held.slotId ? "selected-card" : ""} ${finalSlotId === held.slotId ? "final-card-highlight" : ""}`}
+              className={`hand-card inspect-card ${selected === held.slotId ? "selected-card" : ""} ${isNewReveal(held) ? "new-reveal" : ""}`}
               aria-label={`Inspect card ${index + 1}: ${describeCard(held)}`}
               aria-pressed={selected === held.slotId}
               onClick={() => setSelected(selected === held.slotId ? null : held.slotId)}
@@ -67,15 +68,15 @@ export function OwnHand({ player, name, target, active, profile, streak = 0, poi
         {inspected ? describeCard(inspected) : player.hand.length ? "Select a card to inspect it. Hidden cards stay unknown." : "One shared deck. Every draw changes the odds."}
       </p>
       <div className="hand-legend">
-        <span className="legend-public" /> Revealed
+        <span className="legend-latest" /> New this reveal
         <span className="legend-private" /> Hidden from everyone
       </div>
     </section>
   );
 }
 
-export function PlayerHand({ player, name, active, disconnected, phase, profile, streak = 0, points = 0, finalSlotId }: {
-  player: Player; name: string; active: boolean; disconnected: boolean; phase: GameView["phase"]; profile?: PlayerProfile; streak?: number; points?: number; finalSlotId?: string | null;
+export function PlayerHand({ player, name, active, disconnected, phase, profile, streak = 0, points = 0 }: {
+  player: Player; name: string; active: boolean; disconnected: boolean; phase: GameView["phase"]; profile?: PlayerProfile; streak?: number; points?: number;
 }) {
   const total = player.hand.reduce((sum, held) => sum + (held.public ? held.card?.value ?? 0 : 0), 0);
   const hidden = player.hand.filter((held) => !held.public).length;
@@ -89,8 +90,8 @@ export function PlayerHand({ player, name, active, disconnected, phase, profile,
       </div>
       <div className="opponent-cards" tabIndex={0} aria-label={`${name}'s revealed cards`}>
         {player.hand.map((held, cardIndex) => (
-          <div key={held.slotId} className={`hand-card ${finalSlotId === held.slotId ? "final-card-highlight" : ""}`}>
-            <InspectableCard card={held.card} isPublic={held.public} label={`${name}'s card ${cardIndex + 1}`} delay={held.dealOrder * MOTION.dealStagger} />
+          <div key={held.slotId} className={`hand-card ${isNewReveal(held) ? "new-reveal" : ""}`}>
+            <InspectableCard card={held.card} isPublic={held.public} label={`${name}'s card ${cardIndex + 1}${isNewReveal(held) ? " · new this reveal" : ""}`} delay={held.dealOrder * MOTION.dealStagger} />
           </div>
         ))}
         {!player.hand.length && <span className="muted empty-hand">{player.committed ? "Ready for the deal" : "Choosing possibilities"}</span>}

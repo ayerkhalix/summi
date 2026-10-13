@@ -1,6 +1,18 @@
 # Validation — October 13, 2026
 
+## Reveal highlights and target ranges
+
+The engine/server suite passed 112 tests (the two credentialed Supabase tests remain skipped in the default run). Lint, TypeScript, the production build and the credential scan passed. Nine selected Chromium scenarios passed against the production build with hosted Supabase: complete staged reveals and refreshes at 1280px, 834px, 390px and 320px; older-payload masking; bot entry; desktop/phone enlarged-card inspection; and the mobile tutorial.
+
+Reveal metadata persists in room state. Tests verify that first-reveal highlights remain during additions, second-reveal highlights replace them, final flips accumulate into the final group, results retain that group, and a fresh round clears it. Older room records safely start tracking from their next reveal. Browser checks compare highlighted card identities in the human and opponent hands with the server's current wave and verify that hidden cards are never marked, even if an old payload supplies hidden faces and an invalid highlight flag. Board geometry and scroll position remain unchanged.
+
+Target-bound regressions explicitly verify 70–150, 45–110, 30–85 and 20–70 for two through five players. Rules, tutorial copy and the README use these updated ranges. Crimson marks newly revealed cards; plum marks keyboard focus and inspection. No SQL migration is required.
+
+## Match-length dropdowns
+
 Match-length dropdown follow-up: the production build and lint passed. Browser review covered create-room, bot setup and lobby selects at 1440px and 390px, including the open native option menus, all six round choices, full-width 51px controls, dark option backgrounds, readable ivory labels and no page overflow. Keyboard selection saved the new limit to hosted Supabase. The existing two-browser host/settings/profile scenario passed again, including the disabled guest selector. Screenshots are retained in ignored `.local/dropdown-review/`.
+
+## Earlier match release checks
 
 Executed on Windows with Node.js 24.11.1 and npm 11.6.2.
 

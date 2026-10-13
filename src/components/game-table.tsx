@@ -23,7 +23,6 @@ export function GameTable({ room, busy, send, rules }: RoomProps & { rules: () =
   const paused = room.paused.length > 0;
   const activeName = game.activePlayerId ? name(game.activePlayerId) : null;
   const standing = (id: string) => room.match.standings.find((row) => row.playerId === id);
-  const finalSlotId = game.phase === "final_reveal" ? game.finalReveal?.lastSlotId : null;
   return (
     <motion.main className="game-page" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} onAnimationComplete={() => window.dispatchEvent(new Event("summin-table-settled"))}>
       <div className="game-heading">
@@ -71,11 +70,11 @@ export function GameTable({ room, busy, send, rules }: RoomProps & { rules: () =
           </section>
           <section className="opponents" aria-label="Other players" style={{ gridTemplateColumns: `repeat(${opponents.length}, minmax(0, 1fr))` }}>
             {opponents.map((player) => (
-              <PlayerHand key={player.id} player={player} name={name(player.id)} profile={room.members.find((m) => m.id === player.id)?.profile} streak={standing(player.id)?.streak} points={standing(player.id)?.points} finalSlotId={finalSlotId} active={game.activePlayerId === player.id} disconnected={room.members.find((member) => member.id === player.id)?.disconnectedAt !== null} phase={game.phase} />
+              <PlayerHand key={player.id} player={player} name={name(player.id)} profile={room.members.find((m) => m.id === player.id)?.profile} streak={standing(player.id)?.streak} points={standing(player.id)?.points} active={game.activePlayerId === player.id} disconnected={room.members.find((member) => member.id === player.id)?.disconnectedAt !== null} phase={game.phase} />
             ))}
           </section>
           <div className={`table-stage ${own ? "" : "spectator-stage"}`}>
-            {own && <OwnHand key={game.round} player={own} name={me.name} profile={me.profile} streak={standing(me.id)?.streak} points={standing(me.id)?.points} finalSlotId={finalSlotId} target={game.target} active={game.activePlayerId === room.me} />}
+            {own && <OwnHand key={game.round} player={own} name={me.name} profile={me.profile} streak={standing(me.id)?.streak} points={standing(me.id)?.points} target={game.target} active={game.activePlayerId === room.me} />}
             <div className="turn-area">
               {finished ? <RoundResults key={game.round} room={room} busy={busy} send={send} /> : ended ? (
                 <div className="decision-panel waiting"><Icon name="shuffle" /><p>This round has ended. Return to the lobby for a fresh deck.</p></div>

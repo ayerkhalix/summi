@@ -7,6 +7,7 @@ import type {
   PlayerCommand,
   RandomInt,
   Result,
+  RevealStage,
 } from "./types";
 
 export class RuleError extends Error {}
@@ -53,6 +54,7 @@ export function makeRound(
     events: [],
     results: [],
     tiebreakApplied: false,
+    latestReveal: null,
     finalReveal: null,
     players: ids.map((id) => ({
       id,
@@ -82,12 +84,16 @@ function deal(s: GameState, p: GamePlayer, count: number) {
       dealOrder: s.players.reduce((n, player) => n + player.hand.length, 0),
     });
 }
-function reveal(s: GameState, p: GamePlayer, count: number, random: RandomInt) {
+function reveal(s: GameState, p: GamePlayer, count: number, random: RandomInt, stage: RevealStage) {
   const hidden = shuffle(
     p.hand.filter((c) => !c.revealed),
     random,
   );
-  for (const c of hidden.slice(0, count)) c.revealed = true;
+  for (const c of hidden.slice(0, count)) {
+    c.revealed = true;
+    c.revealedIn = stage;
+    s.latestReveal = stage;
+  }
   if (count)
     event(
       s,
@@ -148,7 +154,7 @@ export function advance(state: GameState, random: RandomInt): GameState {
       break;
     case "initial_deal":
       for (const p of s.players)
-        reveal(s, p, Math.floor(p.hand.length / 2), random);
+        reveal(s, p, Math.floor(p.hand.length / 2), random, "first");
       s.phase = "first_reveal";
       break;
     case "first_reveal":
@@ -185,6 +191,8 @@ export function advance(state: GameState, random: RandomInt): GameState {
       if (next) {
         s.finalReveal ??= { total: s.players.reduce((n, p) => n + p.hand.filter((c) => !c.revealed).length, 0), revealed: 0, lastSlotId: null };
         next.held.revealed = true;
+        next.held.revealedIn = "final";
+        s.latestReveal = "final";
         s.finalReveal.revealed++;
         s.finalReveal.lastSlotId = `${s.round}:${next.p.id}:${next.index}`;
         event(s, "reveal", "The final card turns over.", next.p.id);
@@ -291,6 +299,7 @@ export function act(
             p,
             Math.max(0, p.hand.filter((c) => !c.revealed).length - 1),
             random,
+            "second",
           );
         s.phase = "second_reveal";
       } else finalReveal(s);
@@ -323,6 +332,7 @@ export function projectGame(s: GameState): GameView {
       hand: p.hand.map((c, i) => ({
         slotId: `${s.round}:${p.id}:${i}`,
         public: c.revealed,
+        newlyRevealed: c.revealed && !!s.latestReveal && c.revealedIn === s.latestReveal,
         dealOrder: c.dealOrder,
         card: c.revealed ? { ...c.card } : null,
       })),
