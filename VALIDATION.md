@@ -1,5 +1,7 @@
 # Validation — October 13, 2026
 
+Match-length dropdown follow-up: the production build and lint passed. Browser review covered create-room, bot setup and lobby selects at 1440px and 390px, including the open native option menus, all six round choices, full-width 51px controls, dark option backgrounds, readable ivory labels and no page overflow. Keyboard selection saved the new limit to hosted Supabase. The existing two-browser host/settings/profile scenario passed again, including the disabled guest selector. Screenshots are retained in ignored `.local/dropdown-review/`.
+
 Executed on Windows with Node.js 24.11.1 and npm 11.6.2.
 
 | Check | Result |

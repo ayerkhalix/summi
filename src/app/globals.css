@@ -946,7 +946,8 @@ button svg {
   font-size: 12px;
   margin: 22px 0;
 }
-.field-label input {
+.field-label input,
+.field-label select {
   display: block;
   width: 100%;
   margin-top: 9px;
@@ -957,7 +958,27 @@ button svg {
   padding: 12px 15px;
   color: var(--text);
 }
-.field-label input:focus-visible {
+.field-label select {
+  color-scheme: dark;
+  cursor: pointer;
+  font-size: 14px;
+}
+.field-label select option,
+.range-label select option {
+  background: var(--surface);
+  color: var(--text);
+}
+.field-label select:not(:disabled):hover {
+  border-color: var(--rose);
+}
+.field-label select:disabled {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.field-label input:focus-visible,
+.field-label select:focus-visible {
   border-color: var(--accent);
 }
 input::placeholder {
@@ -1072,6 +1093,8 @@ input[type="range"] {
   padding: 10px;
   border-radius: 6px;
   margin-top: 8px;
+  color: var(--text);
+  color-scheme: dark;
 }
 .modal > .fine-print {
   margin-top: 21px;
