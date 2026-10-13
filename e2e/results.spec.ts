@@ -55,6 +55,15 @@ for (const width of [1440, 390]) for (const outcome of ["human", "bot", "shared"
     const dialog = page.getByRole("dialog", { name: "The match champions." });
     await expect(dialog).toBeVisible();
     const champions = room.match.standings.filter((row) => row.rank === 1);
+    const podium = dialog.getByRole("region", { name: "Championship podium" });
+    await expect(podium).toBeVisible();
+    await expect(podium.locator('.podium-place[data-rank="1"]')).toHaveCount(champions.length);
+    for (const row of room.match.standings.filter(row => row.rank <= 3)) {
+      await expect(podium.getByRole("listitem", { name: `Rank ${row.rank}: ${row.name}, ${row.points} match points`, exact: true })).toBeVisible();
+    }
+    const championHeights = await podium.locator('.podium-place[data-rank="1"]').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+    expect(new Set(championHeights.map(height => Math.round(height))).size).toBe(1);
+    await expect(podium.locator('.podium-player-card').first()).toHaveCSS("animation-name", "none");
     await expect(dialog.locator(".champion-hero h2")).toHaveText(champions.map((row) => row.name).join(" & "));
     await expect(dialog.locator(".result-count")).toHaveText(String(champions[0].points));
     await expect(dialog.locator(".championship")).toHaveAttribute("data-reduced", "true");
@@ -115,6 +124,7 @@ test("five-player standings and large final hands remain readable on small phone
   for (const rank of [1, 2, 3, 4]) await expect(dialog.locator(`.championship-standings .podium-rank-${rank}`))
     .toHaveCount(room.match.standings.filter((row) => Math.min(row.rank, 4) === rank).length);
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await expect(dialog.locator('.podium-place')).toHaveCount(room.match.standings.filter(row => row.rank <= 3).length);
   await page.screenshot({ path: "test-results/championship-five-320.png" });
   await page.getByRole("button", { name: "Close dialog" }).click();
   const big = await fixture(page, "human", 2, true);
@@ -132,6 +142,7 @@ test("score count finishes once, controls work immediately and device motion set
   await page.goto(`/room/${room.code}`);
   const dialog = page.getByRole("dialog");
   await expect(dialog.locator(".championship")).toHaveAttribute("data-reduced", "false");
+  await expect(dialog.locator('.podium-place-1 .podium-player-card').first()).toHaveCSS("animation-name", "podium-turn");
   const points = room.match.standings.find((row) => row.rank === 1)!.points;
   await expect(dialog.locator(".result-count")).toHaveText(String(points));
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -144,6 +155,7 @@ test("score count finishes once, controls work immediately and device motion set
   await page.getByRole("button", { name: "View results" }).click();
   await expect(dialog.locator(".result-count")).toHaveText(String(points));
   await expect(dialog).toHaveAttribute("data-celebrate", "false");
+  await expect(dialog.locator('.podium-player-card').first()).toHaveCSS("animation-name", "none");
   expect(mutations).toEqual([]);
   await page.evaluate(() => localStorage.setItem("summin-audio", JSON.stringify({ reducedMotion: true })));
   await page.reload();

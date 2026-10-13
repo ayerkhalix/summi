@@ -10,7 +10,7 @@ export function useResultsReducedMotion() {
   return !!system || prefs.reducedMotion;
 }
 
-export function ResultCount({ value, play, reduced, label }: { value: number; play: boolean; reduced: boolean; label: string }) {
+export function ResultCount({ value, play, reduced, label, delay = 450 }: { value: number; play: boolean; reduced: boolean; label: string; delay?: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   const played = useRef(false);
   useEffect(() => {
@@ -18,7 +18,7 @@ export function ResultCount({ value, play, reduced, label }: { value: number; pl
     if (!play || reduced || played.current) { ref.current.textContent = String(value); return; }
     played.current = true;
     const node = ref.current;
-    const start = performance.now() + 450;
+    const start = performance.now() + delay;
     let frame = 0;
     const tick = (now: number) => {
       const progress = Math.min(1, Math.max(0, (now - start) / 1000));
@@ -27,13 +27,14 @@ export function ResultCount({ value, play, reduced, label }: { value: number; pl
     };
     frame = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(frame); node.textContent = String(value); };
-  }, [value, play, reduced]);
-  return <span aria-label={`${value} ${label}`} className="result-count"><span ref={ref} aria-hidden="true">{play && !reduced ? 0 : value}</span></span>;
+  }, [value, play, reduced, delay]);
+  return <span role="img" aria-label={`${value} ${label}`} className="result-count"><span ref={ref} aria-hidden="true">{play && !reduced ? 0 : value}</span></span>;
 }
 
-export function ResultParticles() {
+export function ResultParticles({ grand = false }: { grand?: boolean }) {
+  const suits = ["spades", "diamonds", "clubs", "hearts", "diamonds", "spades", "hearts", "clubs"] as const;
   return <div className="result-particles" aria-hidden="true">
-    {(["spades", "diamonds", "clubs", "hearts", "diamonds", "spades", "hearts", "clubs"] as const).map((suit, index) =>
+    {(grand ? [...suits, ...suits] : suits).map((suit, index) =>
       <span key={index} className={`result-particle particle-${index}`}><Suit suit={suit} /></span>)}
   </div>;
 }

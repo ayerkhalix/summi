@@ -1,5 +1,13 @@
 # Validation — October 13, 2026
 
+## Grand final-match celebration
+
+Completed matches now have a dedicated card-themed podium stage, with ivory champion cards, plum/rose runners-up, geometric lighting, and a three-dimensional card turn. The champion's reveal follows the other places; shared champions retain equal rank and pedestal height. Only rank 1-3 players appear on the podium; all players remain in the detailed standings. Intermediate rounds retain their compact results. A 1.15-second synthesized buildup resolves with the crown reveal, and the full primary sequence ends within three seconds. Existing scores, final hands, match commands and timers are unchanged.
+
+The production build, lint and TypeScript passed. The existing 120 unit/server tests and five new audio lifecycle tests passed; two credentialed Supabase tests were skipped in the default run. Audio checks cover user-gesture/device requirements, mute/effects preferences, cancellation, cleanup, overlapping playback and device failures. Chromium's real OfflineAudioContext also rendered the sound: both buildup and resolution have nonzero energy, the waveform stays finite without clipping, and its tail is silent after 2.8 seconds. The local WAV review artifact is ignored.
+
+Thirteen production Chromium scenarios passed with hosted Supabase: the eight results scenarios (including actual hands, human/bot/shared champions, phone layouts, five players, reduced motion, reopening and scroll locks) plus the five match scenarios. The real three-round match included automatic next rounds, private-card checks and reload recovery. Podium assertions verify authoritative names, ranks, points, equal heights for co-champions and disabled animations with reduced motion. Desktop and phone screenshots were visually reviewed and saved in ignored `.local/grand-finale-review/`. Outcome fixtures use browser interception; real room/game checks use the existing backend. Firefox and WebKit were not run for this update.
+
 ## Championship results
 
 The results presentation now separates the overall match champion from the final-round winner. It uses authoritative standings, actual final hands in deal order, target/total/distance summaries, accurate shared ranks, and recorded round totals/points. The round selector excludes previous matches and never sends a game command. Missing, private, duplicated or inconsistent hands are omitted. Historical hands are unavailable because existing history stores scores only; no cards are inferred or persisted by this change.

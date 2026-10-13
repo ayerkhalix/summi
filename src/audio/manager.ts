@@ -1,4 +1,5 @@
 "use client";
+import { scheduleChampionship } from "./championship";
 export const SOUNDS = [
   "click",
   "hover",
@@ -81,6 +82,7 @@ class AudioManager {
   private loaded = false;
   private prefs = DEFAULT_AUDIO;
   private lastPlay = new Map<string, number>();
+  private stopChampionship = () => {};
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
     return () => {
@@ -113,6 +115,7 @@ class AudioManager {
   };
   update(partial: Partial<AudioPreferences>) {
     this.prefs = { ...this.snapshot(), ...partial };
+    if (this.prefs.muted || this.prefs.effects === 0) this.stopChampionship();
     try {
       localStorage.setItem("summin-audio", JSON.stringify(this.prefs));
     } catch {
@@ -143,6 +146,15 @@ class AudioManager {
     } catch {
       /* Audio never blocks play. */
     }
+  }
+  championship() {
+    this.stopChampionship();
+    if (!this.context || !this.output || this.context.state !== "running" ||
+      this.prefs.muted || this.prefs.effects === 0) return () => {};
+    try {
+      this.stopChampionship = scheduleChampionship(this.context, this.output);
+      return this.stopChampionship;
+    } catch { return () => {}; /* Sound never blocks the results. */ }
   }
   play(sound: Sound) {
     try {

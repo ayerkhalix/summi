@@ -1,0 +1,96 @@
+/* A complete match earns its own stage; round results keep their compact layout. */
+.round-stage { display: contents; }
+.championship-finale .championship-feature { display: block; padding-top: 0; }
+.championship-stage { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.3fr); align-items: center; gap: 24px; min-height: 370px; margin: 0 -28px 22px; padding: 32px 28px 24px; overflow: hidden; border-bottom: 1px solid var(--line); background: radial-gradient(ellipse at 65% 85%, var(--secondary-soft), transparent 65%), var(--bg); }
+.app .championship-finale .champion-hero { padding: 16px 0; overflow: visible; background: none; }
+.app .championship-finale .champion-hero h2 { font-size: clamp(40px, 4.5vw, 64px); letter-spacing: -1.8px; }
+.app .championship-finale .champion-hero > .eyebrow { letter-spacing: 2.8px; }
+.championship-finale .champion-emblem { position: relative; width: 62px; height: 78px; margin-bottom: 20px; border-radius: 9px; background: var(--surface-2); box-shadow: 0 8px 30px var(--shadow), 0 0 42px var(--accent-soft); }
+.championship-finale .champion-emblem::before { content: ""; position: absolute; inset: 5px; border: 1px solid var(--accent-border); border-radius: 5px; }
+.championship-finale .champion-emblem::after { content: "◆"; position: absolute; bottom: 7px; font-size: 8px; }
+.championship-finale .champion-score > strong { font-size: 52px; }
+.finale-light { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.finale-light::before { content: ""; position: absolute; width: 420px; height: 420px; left: -60px; top: -35px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 17%, transparent), transparent 68%); }
+.finale-light > span { position: absolute; top: -90px; left: 57%; width: 100px; height: 530px; transform: rotate(24deg); transform-origin: top center; background: linear-gradient(180deg, color-mix(in srgb, var(--secondary) 12%, transparent), transparent); }
+.finale-light > span + span { left: 80%; transform: rotate(-25deg); background: linear-gradient(180deg, color-mix(in srgb, var(--rose) 9%, transparent), transparent); }
+.match-podium { position: relative; min-width: 0; padding-top: 10px; }
+.podium-platform { position: relative; display: flex; align-items: flex-end; justify-content: center; gap: 9px; margin: 0; padding: 0; list-style: none; perspective: 1100px; }
+.podium-place { position: relative; z-index: 1; flex: 1 1 0; max-width: 155px; min-width: 0; --podium-color: var(--secondary); --plinth-height: 30px; }
+.podium-place-1 { z-index: 2; flex-grow: 1.13; --podium-color: var(--accent); --plinth-height: 56px; }
+.podium-place-3 { --podium-color: var(--rose); --plinth-height: 18px; }
+.podium-player-card { position: relative; height: 214px; transform-style: preserve-3d; }
+.podium-place-1 .podium-player-card { height: 238px; }
+.podium-card-front, .podium-card-back { position: absolute; inset: 0; border: 1px solid color-mix(in srgb, var(--podium-color) 70%, var(--line)); border-radius: 9px; backface-visibility: hidden; -webkit-backface-visibility: hidden; box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow) 60%, transparent); }
+.podium-card-front { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; padding: 24px 14px 18px; color: var(--text); background: var(--surface-2); }
+.podium-card-front::before, .podium-card-back::before { content: ""; position: absolute; inset: 5px; border: 1px solid color-mix(in srgb, var(--podium-color) 28%, transparent); border-radius: 5px; pointer-events: none; }
+.podium-place-1 .podium-card-front { color: var(--card-ink); background: var(--card-face); border-color: var(--card-edge); box-shadow: 0 10px 36px var(--shadow), 0 0 28px var(--accent-soft); }
+.podium-card-back { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 15px; transform: rotateY(180deg); background: repeating-linear-gradient(45deg, transparent 0 9px, color-mix(in srgb, var(--secondary) 13%, transparent) 9px 10px), var(--card-back-depth); color: var(--card-back-ink); }
+.podium-card-back > svg { width: 36px; height: 36px; }
+.podium-card-back > span { font-size: 10px; letter-spacing: 3px; }
+.podium-corner { position: absolute; left: 10px; top: 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; font: 17px/1 Georgia, serif; color: var(--secondary-text); }
+.podium-corner > svg { width: 11px; height: 11px; }
+.podium-place-1 .podium-corner { color: var(--suit-red); }
+.podium-place-3 .podium-corner { color: var(--rose); }
+.podium-corner.corner-bottom { left: auto; top: auto; right: 10px; bottom: 10px; transform: rotate(180deg); }
+.podium-crown { display: grid; place-items: center; color: var(--accent); margin-top: -5px; }
+.app .match-podium .player-avatar { width: 42px; height: 42px; flex: 0 0 42px; background: var(--surface); }
+.app .match-podium .player-avatar > svg { width: 22px; height: 22px; }
+.app .match-podium .player-avatar > b { font-size: 26px; }
+.podium-player-name { max-width: 100%; min-height: 30px; display: grid; align-items: center; text-align: center; overflow-wrap: anywhere; font-size: 12px; font-weight: 500; line-height: 1.25; }
+.podium-card-score { font: 32px/.9 Georgia, serif; text-align: center; font-variant-numeric: tabular-nums; }
+.podium-card-score small { display: block; font: 7px/1 Arial, sans-serif; letter-spacing: 1.5px; margin-top: 6px; }
+.podium-card-wins { font-size: 9px; text-align: center; }
+.podium-plinth { position: relative; display: grid; align-items: start; justify-items: center; height: var(--plinth-height); margin: 8px -3px 0; padding-top: 8px; border: 1px solid color-mix(in srgb, var(--podium-color) 40%, var(--line)); border-bottom: 0; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, color-mix(in srgb, var(--podium-color) 19%, var(--surface)), var(--bg)); }
+.podium-plinth::before { content: ""; position: absolute; top: -4px; left: -1px; right: -1px; height: 4px; background: color-mix(in srgb, var(--podium-color) 36%, var(--surface)); border: 1px solid color-mix(in srgb, var(--podium-color) 50%, var(--line)); }
+.podium-plinth > span { font-size: 7px; letter-spacing: 1.3px; color: var(--text-soft); }
+.podium-caption { position: relative; margin-top: 13px; text-align: center; font-size: 8px; letter-spacing: 1.7px; color: var(--muted); }
+.podium-caption > span { padding: 0 7px; font-size: 6px; color: var(--rose); }
+.podium-orbit { position: absolute; inset: -30px 0 30px; display: grid; place-items: center; overflow: hidden; pointer-events: none; opacity: .45; }
+.podium-orbit span { position: absolute; width: 310px; height: 310px; border: 1px solid var(--line); transform: rotate(45deg); }
+.podium-orbit span:nth-child(2) { width: 270px; height: 270px; border-color: var(--secondary-soft); }
+.podium-orbit span:nth-child(3) { width: 340px; height: 340px; }
+.podium-platform[data-players="4"], .podium-platform[data-players="5"] { flex-wrap: wrap; align-items: flex-end; }
+.podium-platform[data-players="4"] .podium-place, .podium-platform[data-players="5"] .podium-place { flex: 0 1 calc(33.333% - 9px); }
+.podium-shared .podium-place { flex-grow: 1; }
+.championship-finale .particle-8 { left: 8%; top: 32%; }.championship-finale .particle-9 { right: 7%; top: 20%; }
+.championship-finale .particle-10 { left: 40%; top: 15%; }.championship-finale .particle-11 { right: 38%; top: 90%; }
+.championship-finale .particle-12 { left: 5%; top: 75%; }.championship-finale .particle-13 { right: 8%; top: 65%; }
+.championship-finale .particle-14 { left: 25%; top: 90%; }.championship-finale .particle-15 { right: 24%; top: 12%; }
+
+@keyframes podium-turn { from { transform: translateY(28px) rotateY(180deg) rotateZ(-5deg); } to { transform: none; } }
+@keyframes podium-lift { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes champion-coronation { 0% { opacity: 0; transform: translateY(20px) rotate(-12deg) scale(.7); } 65% { opacity: 1; transform: translateY(-4px) rotate(3deg) scale(1.08); } 100% { opacity: 1; transform: none; } }
+@keyframes finale-beam { from { opacity: 0; transform: scaleX(.2); } to { opacity: 1; transform: scaleX(1); } }
+@keyframes finale-suits { 0% { opacity: 0; transform: translateY(18px) scale(.65) rotate(-25deg); } 18% { opacity: .7; } 100% { opacity: 0; transform: translateY(-85px) scale(1.15) rotate(35deg); } }
+.championship-finale[data-celebrate="true"][data-reduced="false"] .podium-player-card { animation: podium-turn .7s var(--podium-arrival) cubic-bezier(.2,.7,.25,1) both; }
+.championship-finale[data-celebrate="true"][data-reduced="false"] .podium-plinth { animation: podium-lift .6s .12s both; }
+.championship-finale[data-celebrate="true"][data-reduced="false"] .champion-emblem { animation: champion-coronation .75s var(--champion-reveal) cubic-bezier(.2,.7,.25,1) both; }
+.championship-finale[data-celebrate="true"][data-reduced="false"] .champion-hero h2 { animation: result-rise .7s calc(var(--champion-reveal) + .1s) both; }
+.championship-finale[data-celebrate="true"][data-reduced="false"] .champion-message { animation: result-rise .6s calc(var(--champion-reveal) + .25s) both; }
+.championship-finale[data-celebrate="true"][data-reduced="false"] .finale-light { animation: finale-beam 1.6s ease-out both; }
+.championship-finale[data-celebrate="true"][data-reduced="false"] .result-particle { animation: finale-suits 1.7s var(--champion-reveal) ease-out both; }
+.championship-finale[data-celebrate="true"][data-reduced="false"] .championship-standings li { animation-delay: calc(var(--standing-arrival) + 1s); }
+@media (max-width: 700px) {
+  .championship-stage { grid-template-columns: minmax(0, 1fr); gap: 16px; margin: 0 -16px 20px; padding: 22px 16px 20px; }
+  .app .championship-finale .champion-hero { padding: 0; }
+  .app .championship-finale .champion-hero h2 { font-size: 40px; letter-spacing: -1.2px; }
+  .championship-finale .champion-emblem { width: 48px; height: 60px; margin-bottom: 14px; }
+  .championship-finale .champion-score > strong { font-size: 42px; }
+  .match-podium { max-width: 440px; width: 100%; margin: 0 auto; }
+  .podium-platform { gap: 7px; }
+  .podium-player-card { height: 176px; }
+  .podium-place-1 .podium-player-card { height: 199px; }
+  .podium-card-front { gap: 6px; padding: 22px 9px 16px; }
+  .podium-player-name { font-size: 11px; min-height: 28px; }
+  .podium-corner { left: 8px; top: 8px; font-size: 14px; }
+  .podium-corner.corner-bottom { right: 8px; bottom: 8px; }
+  .podium-corner > svg { width: 9px; height: 9px; }
+  .app .match-podium .player-avatar { width: 32px; height: 32px; flex-basis: 32px; }
+  .app .match-podium .player-avatar > svg { width: 18px; height: 18px; }
+  .podium-card-score { font-size: 26px; }
+  .podium-card-wins { font-size: 8px; }
+  .podium-plinth > span { font-size: 6px; letter-spacing: .7px; }
+  .podium-place { --plinth-height: 23px; }
+  .podium-place-1 { --plinth-height: 40px; }
+  .podium-place-3 { --plinth-height: 17px; }
+}

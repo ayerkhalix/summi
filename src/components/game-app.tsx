@@ -145,17 +145,15 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
       setTimeout(() => audio.play("target"), 250);
     }
     if (g && pg && g.phase !== pg.phase) {
-      audio.play(
+      if (!(g.phase === "round_results" && room.match.complete)) audio.play(
         g.phase === "final_reveal"
           ? "final"
           : g.phase.includes("reveal")
             ? "reveal"
             : "phase",
       );
-      if (g.phase === "round_results") {
-        const winners = room.match.complete
-          ? room.match.standings.filter((row) => row.rank === 1)
-          : g.results.filter((row) => row.winner);
+      if (g.phase === "round_results" && !room.match.complete) {
+        const winners = g.results.filter((row) => row.winner);
         audio.play(
           winners.some((w) => w.playerId === room.me)
             ? winners.length > 1

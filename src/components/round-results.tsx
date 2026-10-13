@@ -7,6 +7,9 @@ import { Avatar } from "./player-profile";
 import type { RoomProps } from "./table-shared";
 import { completedHand, distanceText, resultHeroes, resultRounds } from "./results-data";
 import { ResultCount, ResultParticles, useResultsReducedMotion } from "./results-animation";
+import { MatchPodium } from "./match-podium";
+import { audio } from "@/audio/manager";
+import { CHAMPIONSHIP_REVEAL_MS } from "@/audio/championship";
 
 function NextRoundTimer({ room }: Pick<RoomProps, "room">) {
   const [now, setNow] = useState(() => Date.now());
@@ -53,6 +56,13 @@ function Results({ room, busy, send, celebrate, reduced, onClose }: RoomProps & 
   celebrate: boolean; reduced: boolean; onClose: () => void;
 }) {
   const game = room.game!;
+  useEffect(() => {
+    if (!room.match.complete || !celebrate) return;
+    const stop = audio.championship();
+    const onHidden = () => { if (document.hidden) stop(); };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => { stop(); document.removeEventListener("visibilitychange", onHidden); };
+  }, [room.match.complete, celebrate]);
   const heroes = resultHeroes(room);
   const [selectedHero, setSelectedHero] = useState(heroes[0]?.playerId);
   const hero = heroes.find((row) => row.playerId === selectedHero) ?? heroes[0];
@@ -71,20 +81,25 @@ function Results({ room, busy, send, celebrate, reduced, onClose }: RoomProps & 
   const message = room.match.complete
     ? shared ? "Level on points. A championship shared." : humanWon ? "You played the odds. You took the match." : "The table has its champion. A match well played."
     : shared ? "Equally close. A round shared." : humanWon ? "Your closest call. This round is yours." : "The closest hand takes the round.";
-  return <section className="results-panel championship" aria-label="Round results" data-celebrate={celebrate} data-reduced={reduced}>
+  return <section className={`results-panel championship ${room.match.complete ? "championship-finale" : ""}`} aria-label="Round results" data-celebrate={celebrate} data-reduced={reduced}
+    style={{ "--champion-reveal": `${CHAMPIONSHIP_REVEAL_MS}ms` } as CSSProperties}>
     <div className="championship-feature">
+    <div className={room.match.complete ? "championship-stage" : "round-stage"}>
+    {room.match.complete && <div className="finale-light" aria-hidden="true"><span /><span /></div>}
     <header className={`champion-hero ${room.match.complete ? "match-champions" : "round-victory"} ${humanWon ? "human-victory" : ""}`}>
-      <ResultParticles />
+      <ResultParticles grand={room.match.complete} />
       <div className="champion-emblem" aria-hidden="true"><Icon name="crown" size={30} /></div>
       <span className="eyebrow">{room.match.complete ? shared ? "SHARED MATCH VICTORY" : "MATCH CHAMPION" : shared ? "SHARED ROUND VICTORY" : "ROUND CHAMPION"}</span>
       <h2>{heroes.map((row) => row.name).join(" & ") || "The table is settled."}</h2>
       <p className="champion-message">{message}</p>
       {points !== undefined && <div className="champion-score">
-        <strong><ResultCount value={points} play={celebrate} reduced={reduced} label={room.match.complete ? "match points" : "round points"} /></strong>
+        <strong><ResultCount value={points} play={celebrate} reduced={reduced} delay={room.match.complete ? CHAMPIONSHIP_REVEAL_MS + 200 : 450} label={room.match.complete ? "match points" : "round points"} /></strong>
         <span>{room.match.complete ? "MATCH POINTS" : "ROUND POINTS"}<small>{room.match.complete ? `across ${room.match.round} rounds` : `Round ${lastRoundNumber} of ${room.roundLimit}`}</small></span>
         {heroes.length === 1 && hero?.standing && <span className="champion-wins"><b>{hero.standing.wins}</b> {hero.standing.wins === 1 ? "round won" : "rounds won"}</span>}
       </div>}
     </header>
+    {room.match.complete && <MatchPodium room={room} />}
+    </div>
 
     {hero && <section className="champion-hand-section" aria-label="Champion's final hand">
       <div className="champion-hand-heading">
@@ -98,7 +113,7 @@ function Results({ room, busy, send, celebrate, reduced, onClose }: RoomProps & 
       </div>}
       {hand ? <div className="champion-cards" key={hero.playerId} role="list" aria-label={`${hero.name}'s final cards in deal order`}>
         {hand.map((held, index) => <div className="champion-card" role="listitem" key={held.slotId}
-          style={{ "--card-arrival": `${0.32 + Math.min(index * 0.045, 0.85)}s` } as CSSProperties}>
+          style={{ "--card-arrival": `${(room.match.complete ? 1.6 : .32) + Math.min(index * .045, .7)}s` } as CSSProperties}>
           <PlayingCard card={held.card} faceUp isPublic silent />
         </div>)}
       </div> : <p className="hand-unavailable">The final hand is unavailable. The recorded result is shown below.</p>}
