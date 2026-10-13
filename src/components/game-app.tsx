@@ -153,7 +153,9 @@ export function GameApp({ initialCode }: { initialCode?: string }) {
             : "phase",
       );
       if (g.phase === "round_results") {
-        const winners = g.results.filter((r) => r.winner);
+        const winners = room.match.complete
+          ? room.match.standings.filter((row) => row.rank === 1)
+          : g.results.filter((row) => row.winner);
         audio.play(
           winners.some((w) => w.playerId === room.me)
             ? winners.length > 1

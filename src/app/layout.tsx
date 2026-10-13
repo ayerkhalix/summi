@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./scene.css";
 import "./match.css";
+import "./results.css";
 export const metadata: Metadata = {
   title: "SUMMIN — Know the deck. Play the odds.",
   description:

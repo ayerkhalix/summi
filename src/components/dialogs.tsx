@@ -17,24 +17,40 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  variant,
+  celebrate = false,
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
   wide?: boolean;
+  variant?: "results";
+  celebrate?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const el = ref.current!;
+    const root = document.documentElement, body = document.body;
+    const rootOverflow = root.style.overflow, bodyOverflow = body.style.overflow, padding = body.style.paddingRight;
+    const gutter = window.innerWidth - root.clientWidth;
+    if (gutter) body.style.paddingRight = `${parseFloat(getComputedStyle(body).paddingRight) + gutter}px`;
+    root.style.overflow = "hidden";
+    body.style.overflow = "hidden";
     el.showModal();
+    if (variant === "results") el.focus({ preventScroll: true });
     return () => {
       el.close();
+      root.style.overflow = rootOverflow;
+      body.style.overflow = bodyOverflow;
+      body.style.paddingRight = padding;
     };
-  }, []);
+  }, [variant]);
   return (
     <dialog
       ref={ref}
-      className={`modal ${wide ? "modal-wide" : ""}`}
+      className={`modal ${wide ? "modal-wide" : ""} ${variant === "results" ? "results-dialog" : ""}`}
+      data-celebrate={celebrate}
+      tabIndex={variant === "results" ? -1 : undefined}
       aria-label={title}
       onCancel={onClose}
       onClick={(e) => {
@@ -51,7 +67,7 @@ export function Modal({
           <Icon name="close" />
         </button>
       </div>
-      {children}
+      {variant === "results" ? <div className="results-scroll">{children}</div> : children}
     </dialog>
   );
 }
