@@ -57,17 +57,22 @@
 .final-reveal-stage > p { font-size: 11px; color: var(--muted); }
 .reveal-progress { width: 100%; height: 2px; margin-top: 9px; background: var(--line); }
 .reveal-progress > span { display: block; height: 100%; background: var(--rose); transition: width .5s ease; }
-.new-reveal .playing-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 2px solid var(--accent);
-  border-radius: calc(var(--card-w) * 0.075);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--rose) 45%, transparent);
-  pointer-events: none;
+/* Put the glow on the flipping face so the 3D card cannot cover it. */
+.new-reveal .card-front {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent),
+    inset 0 0 12px color-mix(in srgb, var(--accent) 18%, transparent),
+    var(--reveal-glow);
+}
+.app .opponent-cards {
+  min-height: 96px;
+  padding: 10px 8px;
+}
+.app .hand-scroll {
+  padding-inline: 10px;
 }
 .app .hand-legend .legend-latest {
-  width: 8px; height: 8px; background: transparent; border: 2px solid var(--accent);
+  width: 8px; height: 8px; background: var(--accent); box-shadow: var(--reveal-glow);
 }
 .app .inspect-card.selected-card .playing-card,
 .app .inspect-card:focus-visible .playing-card,

@@ -1,5 +1,13 @@
 # Validation — October 13, 2026
 
+## Reveal glow follow-up
+
+The live Vercel site was reviewed through a complete bot round. Its reveal groups were correct at all three stages, but the effect was a thin outline with a weak halo. The updated card faces have a crimson rim, a restrained inner glow and a stronger outer halo. Opponent rows reserve space for the halo from the start, including their fixed desktop/phone board rows.
+
+Lint, TypeScript, the production build, the credential scan and all 112 engine/server tests passed (two credentialed Supabase tests skipped). Eight selected production Chromium scenarios passed against hosted Supabase, covering the four viewport sizes, older-payload privacy, desktop/phone inspection and the mobile tutorial. After the final spacing adjustment, all four complete-round geometry/refresh checks passed again at 1280px, 834px, 390px and 320px. Browser expectations independently derive each new reveal group from the previously public card identities.
+
+First, second and final reveal screenshots were reviewed on desktop and phone. A separate round with normal animation confirmed the glow on all three groups and at least 10px of vertical halo space inside the opponent panel. Earlier cards lose the glow, hidden cards remain unmarked, and board geometry and scroll position remain steady. Review artifacts are ignored in `.local/reveal-review/` and `test-results/`.
+
 ## Reveal highlights and target ranges
 
 The engine/server suite passed 112 tests (the two credentialed Supabase tests remain skipped in the default run). Lint, TypeScript, the production build and the credential scan passed. Nine selected Chromium scenarios passed against the production build with hosted Supabase: complete staged reveals and refreshes at 1280px, 834px, 390px and 320px; older-payload masking; bot entry; desktop/phone enlarged-card inspection; and the mobile tutorial.

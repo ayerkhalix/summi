@@ -70,6 +70,8 @@
   --accent-soft: color-mix(in srgb, var(--accent) 10%, var(--surface));
   --secondary-soft: color-mix(in srgb, var(--secondary) 12%, var(--surface));
   --accent-border: color-mix(in srgb, var(--accent) 70%, var(--line));
+  --reveal-glow: 0 0 6px color-mix(in srgb, var(--accent) 65%, transparent),
+    0 0 16px color-mix(in srgb, var(--accent) 35%, transparent);
   /* White passes 4.5:1 on crimson; ivory falls just below that threshold. */
   --on-accent: #ffffff;
   --shadow: #000000;

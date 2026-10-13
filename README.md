@@ -75,7 +75,7 @@ If a dev server is already running in this checkout, reuse it instead of startin
 
 Ace = 1; Jack = 11, Queen = 12, King = 13. Targets are independently uniform integers. Every round starts with a freshly shuffled deck and one automatic face-up burn per active player in rotating order.
 
-Crimson outlines identify the most recent reveal wave in every player's hand. The first reveal marks all newly public cards. The second reveal moves the outlines to its new cards, leaving earlier cards face up without an outline. During the final reveal, each flipped card joins the final highlighted group; that group remains marked through results. Reveal metadata is stored with the room, so refreshes, reconnects and spectators see the same highlights. A fresh round starts with no highlighted cards.
+A crimson rim and soft glow identify the most recent reveal wave in every player's hand. The first reveal marks all newly public cards. The second reveal moves the glow to its new cards, leaving earlier cards face up without a glow. During the final reveal, each flipped card joins the final highlighted group; that group remains marked through results. The glow follows the card face during its flip, with reserved space around the hands so it stays visible. Reveal metadata is stored with the room, so refreshes, reconnects and spectators see the same highlights. A fresh round starts with no highlighted cards.
 
 Players commit their initial counts simultaneously after the burns. Counts remain concealed until all players commit, including in the owner’s server projection; the UI retains the confirmed count only through its decision state. The server deals one card per player repeatedly in rotating order, skipping players who already have their selected number.
 

@@ -79,7 +79,9 @@ for (const viewport of [
       expect(response.ok()).toBe(true);
       return (await response.json()) as RoomView;
     };
-    const visibleHand = async (hidden: number) => {
+    const publicIds = () => new Set(room.game!.players.flatMap((player) =>
+      player.hand.filter((held) => held.public).map((held) => held.card!.id)));
+    const visibleHand = async (hidden: number, earlierReveals = new Set<string>()) => {
       const own = room.game!.players.find((player) => player.id === room.me)!;
       expect(own.hand.filter((card) => !card.public)).toHaveLength(hidden);
       for (const player of room.game!.players)
@@ -96,9 +98,11 @@ for (const viewport of [
         String(own.hand.reduce((sum, card) => sum + (card.card?.value ?? 0), 0)),
       );
       await expect(page.locator(".own-total > span")).toHaveText(hidden ? "REVEALED TOTAL" : "YOUR TOTAL");
-      const expectedOwn = own.hand.filter((held) => held.newlyRevealed).map((held) => held.card!.id).sort();
+      // Derive the latest group from previously public identities, independently
+      // of the server flag, so a missing first/second-wave marker cannot pass.
+      const expectedOwn = own.hand.filter((held) => held.public && !earlierReveals.has(held.card!.id)).map((held) => held.card!.id).sort();
       const expectedOthers = room.game!.players.filter((player) => player.id !== room.me)
-        .flatMap((player) => player.hand.filter((held) => held.newlyRevealed).map((held) => held.card!.id)).sort();
+        .flatMap((player) => player.hand.filter((held) => held.public && !earlierReveals.has(held.card!.id)).map((held) => held.card!.id)).sort();
       await expect.poll(() => page.locator(".own-hand .new-reveal .playing-card").evaluateAll((cards) => cards.map((card) => card.getAttribute("data-card")).sort())).toEqual(expectedOwn);
       await expect.poll(() => page.locator(".opponents .new-reveal .playing-card").evaluateAll((cards) => cards.map((card) => card.getAttribute("data-card")).sort())).toEqual(expectedOthers);
       await expect(page.locator('.new-reveal [data-card="hidden"]')).toHaveCount(0);
@@ -123,6 +127,7 @@ for (const viewport of [
     await expect(page.locator('.own-hand [data-card="hidden"]')).toHaveCount(15);
     room = await waitForPhase(page, code, "first_additions", true);
     await visibleHand(8);
+    const firstReveals = publicIds();
     const inspectHidden = page.locator('.own-hand .inspect-card:has([data-card="hidden"])').first();
     await inspectHidden.click();
     await expect(inspectHidden).toHaveAttribute("aria-pressed", "true");
@@ -151,13 +156,18 @@ for (const viewport of [
     }
     expect(afterAdding.hand.filter((card) => !card.public).every((card) => card.card === null)).toBe(true);
     room = await waitForPhase(page, code, "second_additions", true);
-    await visibleHand(1);
+    await visibleHand(1, firstReveals);
+    const secondReveals = publicIds();
+    if (viewport.width === 1280 || viewport.width === 390)
+      await page.screenshot({ path: `test-results/bot-visibility-${viewport.width}-second.png`, fullPage: true });
     await act(1);
     room = await waitForPhase(page, code, "round_results");
     await expect(page.getByRole("region", { name: "Round results", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Review the revealed table" }).click();
     expect(room.game!.players.find((player) => player.id === room.me)!.hand).toHaveLength(19);
-    await visibleHand(0);
+    await visibleHand(0, secondReveals);
+    if (viewport.width === 1280 || viewport.width === 390)
+      await page.screenshot({ path: `test-results/bot-visibility-${viewport.width}-final.png`, fullPage: true });
     await page.reload();
     await waitForPhase(page, code, "round_results");
     await expect(page.locator('.own-hand [data-card="hidden"]')).toHaveCount(0);

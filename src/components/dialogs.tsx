@@ -196,8 +196,8 @@ export function Rules({
             Cards start face down, hidden from everyone, including you. Half
             your initial cards, rounded down, are revealed. On your turn,
             add 0–4 cards. Zero is a final pass for that addition window. The
-            next reveal leaves exactly one hidden card. Crimson outlines mark
-            the latest reveal; earlier revealed cards lose their outlines.
+            next reveal leaves exactly one hidden card. A crimson glow marks
+            the latest reveal; earlier revealed cards lose their glow.
           </p>
           <h3>03 / Make your final call</h3>
           <p>
@@ -268,7 +268,7 @@ const tutorialCopy = [
   ],
   [
     "Half the picture.",
-    "The server randomly reveals floor(initial size ÷ 2) of your cards. Crimson outlines mark the cards in this reveal. The rest stay face down, hidden from everyone, including you. Use the revealed total and unseen deck to judge your next move.",
+    "The server randomly reveals floor(initial size ÷ 2) of your cards. A crimson glow marks every card in this reveal. The rest stay face down, hidden from everyone, including you. Use the revealed total and unseen deck to judge your next move.",
   ],
   [
     "Add, or hold your nerve.",
@@ -276,7 +276,7 @@ const tutorialCopy = [
   ],
   [
     "One secret remains.",
-    "The second reveal leaves exactly one hidden card. Crimson outlines move to the newly revealed cards; earlier cards stay face up without an outline. First-window additions are included.",
+    "The second reveal leaves exactly one hidden card. The crimson glow moves to the newly revealed cards; earlier cards stay face up without a glow. First-window additions are included.",
   ],
   [
     "Your last decision.",

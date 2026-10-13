@@ -447,7 +447,7 @@
 .app .table-main {
   display: grid;
   grid-template-columns: minmax(0,1fr);
-  grid-template-rows: 106px 142px minmax(320px,auto);
+  grid-template-rows: 106px 162px minmax(320px,auto);
   gap: 14px;
   min-width: 0;
   aspect-ratio: auto;
@@ -1237,7 +1237,7 @@
     justify-content: center;
   }
   .app .table-main {
-    grid-template-rows: 104px 138px auto;
+    grid-template-rows: 104px 158px auto;
     gap: 10px;
   }
   .app .public-table {
